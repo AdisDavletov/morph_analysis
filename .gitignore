@@ -1,0 +1,4 @@
+.DS_Store
+_tmp_/
+__pycache__/
+*.ipynb

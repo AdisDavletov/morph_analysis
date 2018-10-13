@@ -95,8 +95,8 @@ def _read_words_2(filename, lower=False, to_replace='\n\n'):
       return f.read().replace(to_replace, " <eos> ").split()
 
 
-def _build_vocab(filename, additional_file=None, lower=False):
-  data = _read_words(filename, lower=lower)
+def _build_vocab(filename, additional_file=None, lower=False, with_tags_and_pos=True):
+  data = _read_words(filename, with_tags_and_pos, lower=lower)
   word_to_id = {}
   extra_words = []
   if additional_file:
@@ -109,7 +109,6 @@ def _build_vocab(filename, additional_file=None, lower=False):
     words, _ = list(zip(*count_pairs))
     word_to_id[key] = dict(zip(words, range(len(words))))
   return word_to_id
-
 
 def _file_to_word_ids(filename, word_to_id, with_tags_and_pos=True, lower=False):
   data = _read_words(filename, with_tags_and_pos, lower)
@@ -144,7 +143,7 @@ def ptb_raw_data(data_path=None,
   valid_path = os.path.join(data_path, dev)
   test_path = os.path.join(data_path, test)
   if word_to_id is None:
-    word_to_id = _build_vocab(train_path, additional_file, lower)
+    word_to_id = _build_vocab(train_path, additional_file, lower, with_tags_and_pos)
   train_data = _file_to_word_ids(train_path, word_to_id, with_tags_and_pos, lower)
   valid_data = _file_to_word_ids(valid_path, word_to_id, with_tags_and_pos, lower)
   test_data = _file_to_word_ids(test_path, word_to_id, with_tags_and_pos, lower)

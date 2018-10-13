@@ -15,9 +15,9 @@ from tensorflow.python.client import device_lib
 flags = tf.flags
 logging = tf.logging
 
-flags.DEFINE_string("data_path", '../Downloads/morpho_ru_eval/datasets/',
+flags.DEFINE_string("data_path", 'datasets/',
                     "Where the training/test data is stored.")
-flags.DEFINE_string("save_path", '_tmp_',
+flags.DEFINE_string("save_path", 'chkps/_tmp_/',
                     "Model output directory.")
 flags.DEFINE_string("raw_data", '',
                     "raw_data stored path")
@@ -31,6 +31,9 @@ flags.DEFINE_bool("debug", False,
                   "Turn on/off debug mode.")
 flags.DEFINE_bool("suffix_model", False,
                   "If true model would use suffix_model mode")
+
+flags.DEFINE_integer("exp_idx", 0,
+                  "Experiment index")
 
 FLAGS = flags.FLAGS
 
@@ -183,7 +186,7 @@ class Model(object):
         [0, 0, 0], [self.batch_size, self.num_steps-1, self._rnn_out_size])], axis=1)
     prev_output.set_shape([self.batch_size, self.num_steps, self._rnn_out_size])
     inputs = tf.concat([prev_output, self._rnn_output], axis=2)
-    if self.debug: print('shape of the inputs to classifier layers:', inputs.get_shape())
+    if self.debug: print('shape of the inputs to classifier layers:', inputs.get_shape(), flush=True)
     inputs = tf.reshape(inputs, shape=[-1, self._rnn_out_size * 2])
     for name, out_size in classifiers.items():
       logits = self._add_clf_layer(
@@ -391,54 +394,39 @@ class Model(object):
 
 class SmallConfig(object):
   """Small config."""
-  init_scale = 0.1
-  learning_rate = 1.0
-  max_grad_norm = 5
-  num_layers = 2
-  num_steps = 6
-  hidden_size = [640] * 2
-  embedding_size = 640
-  max_epoch = 6
-  max_max_epoch = 100
-  keep_prob = {'embedding_layer':0.5, 'rnn_layer':[0.5, 0.4]}
-  lr_decay = 0.8
-  batch_size = 5
-  vocab_size = 10000
-  classifiers = {
-    'pos':14,'case':7,
-    'gender':4,'number':3,
-    'animacy':3, 'tense':3,
-    'person':4, 'verbform':4,
-    'mood':3, 'variant':3,
-    'degree':3, 'numform':3}
-  cell_type = 'lstm_block'
-  weight_decay = {'lang_model':0.0002, 'classifiers':0.0002,
-    'classifiers_with_freezed_rnn':0.0002, 'classifiers_with_freezed_rnn_embs':0.0002,
-    'total':0.0002}
-  rnn_loss_weight = 1.0
-  clfs_loss_weight = 1.0
-  optimizer = 'SGD'
-  train_op = 'total'
-  loss_to_view = 'clfs_loss'
+  def __init__(self):
+    self.init_scale = 0.1
+    self.learning_rate = 0.5
+    self.max_grad_norm = 5
+    self.num_layers = 2
+    self.num_steps = 35
+    self.hidden_size = [640] * 2
+    self.embedding_size = 640
+    self.max_epoch = 6
+    self.max_max_epoch = 40
+    self.keep_prob = {'embedding_layer':0.5, 'rnn_layer':[0.5, 0.5, 0.5]}
+    self.lr_decay = 0.8
+    self.batch_size = 20
+    self.vocab_size = 10000
+    self.classifiers = {
+      'pos':14,'case':7,
+      'gender':4,'number':3,
+      'animacy':3, 'tense':3,
+      'person':4, 'verbform':4,
+      'mood':3, 'variant':3,
+      'degree':3, 'numform':3}
+    self.cell_type = 'lstm_block'
+    self.weight_decay = {'lang_model':0.0002, 'classifiers':0.0002,
+      'classifiers_with_freezed_rnn':0.0002, 'classifiers_with_freezed_rnn_embs':0.0002,
+      'total':0.0002}
+    self.rnn_loss_weight = 1.0
+    self.clfs_loss_weight = 1.0
+    self.optimizer = 'SGD'
+    self.train_op = 'classifiers'
+    self.loss_to_view = 'clfs_loss'
 
-  def __iter__(self):
-    for attr, val in self.__dict__.items():
-      yield attr, val
-
-class TestConfig(object):
-  """Tiny config, for testing."""
-  init_scale = 0.1
-  learning_rate = 1.0
-  max_grad_norm = 1
-  num_layers = 1
-  num_steps = 2
-  hidden_size = 2
-  max_epoch = 1
-  max_max_epoch = 1
-  keep_prob = 1.0
-  lr_decay = 0.5
-  batch_size = 20
-  vocab_size = 10000
+  def print(self):
+    print(self.__dict__, flush=True)
 
 
 def run_epoch(session, model, cost_name, eval_op=None, verbose=False):
@@ -446,7 +434,6 @@ def run_epoch(session, model, cost_name, eval_op=None, verbose=False):
   start_time = time.time()
   costs = 0.0
   iters = 0
-  print(model._padding)
   state = session.run(model.initial_state)
 
   fetches = {
@@ -478,7 +465,7 @@ def run_epoch(session, model, cost_name, eval_op=None, verbose=False):
       print("%.3f perplexity: %.3f speed: %.0f wps" %
             (step * 1.0 / model.input.epoch_size, np.exp(costs / iters),
              iters * model.input.batch_size * max(1, FLAGS.num_gpus) /
-             (time.time() - start_time)))
+             (time.time() - start_time)), flush=True)
 
   return np.exp(costs / iters)
 
@@ -491,17 +478,13 @@ def run_op(session, op, feed_dict):
 
 def get_config(debug=False):
   """Get model config."""
-  config = None
-  if FLAGS.debug:
-    config = TestConfig()
-  else:
-    config = SmallConfig()
-  return config
+  return SmallConfig()
 
 
 def main(_):
+  
   if not FLAGS.data_path:
-    raise ValueError("Must set --data_path to PTB data directory")
+    raise ValueError("Must set --data_path to data directory")
   print(FLAGS.data_path)
   gpus = [
       x.name for x in device_lib.list_local_devices() if x.device_type == "GPU"
@@ -511,20 +494,23 @@ def main(_):
         "Your machine has only %d gpus "
         "which is less than the requested --num_gpus=%d."
         % (len(gpus), FLAGS.num_gpus))
-  if FLAGS.raw_data != "":
-    with open(FLAGS.data_path + 'raw_data.txt', 'r') as f:
-      raw_data = eval(f.read())
-  else:
-    raw_data = reader.ptb_raw_data(FLAGS.data_path)
-    # with open(FLAGS.data_path +'raw_data.txt', 'w') as f:
-    #   print(raw_data, file=f)
+
+  raw_data = reader.ptb_raw_data(FLAGS.data_path,
+      word_to_id=None,
+      train="gikrya_new_train.out",
+      dev="gikrya_new_test.out",
+      test="gikrya_new_test.out",
+      additional_file=None,
+      with_tags_and_pos=True,
+      lower=True)
+
   train_data, valid_data, test_data, word_to_id = raw_data
 
   config = get_config()
-  print(dict(config))
   eval_config = get_config()
   eval_config.batch_size = 1
-  config.classifiers, eval_config.classifiers = {}, {}
+
+  vocabularies_size = []
   for key in word_to_id:
     if key != 'word':
       config.classifiers[key] = len(word_to_id[key])
@@ -532,8 +518,10 @@ def main(_):
     else:
       config.vocab_size = len(word_to_id[key])
       eval_config.vocab_size = len(word_to_id[key])
-    print(f"{key} vocabulary size == {len(word_to_id[key])}")
+    vocabularies_size += [f'{key}:{len(word_to_id[key])}']
+  print(f"{'|'.join(vocabularies_size)}\n\n", flush=True)
 
+  config.print()
   with tf.Graph().as_default():
     initializer = tf.random_uniform_initializer(-config.init_scale,
                                                 config.init_scale)
@@ -575,25 +563,23 @@ def main(_):
     for model in models.values():
       model.import_ops()
     config_proto = tf.ConfigProto(allow_soft_placement=soft_placement)
-    sv = tf.train.Supervisor(logdir=FLAGS.save_path)    
-    with sv.managed_session(config=config_proto) as session:
-      # m.describe_model()
+    with tf.train.MonitoredTrainingSession(config=config_proto, checkpoint_dir=FLAGS.save_path) as session:
       for i in range(config.max_max_epoch):
         lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
         m.assign_lr(session, config.learning_rate * lr_decay)
-        print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
+        print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)), flush=True)
         train_perplexity = run_epoch(session, m, config.loss_to_view, eval_op=m.train_ops[config.train_op],
                                      verbose=True)
-        print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
+        print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity), flush=True)
         valid_perplexity = run_epoch(session, mvalid, config.loss_to_view)
-        print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity))
+        print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity), flush=True)
 
       test_perplexity = run_epoch(session, mtest, config.loss_to_view)
-      print("Test Perplexity: %.3f" % test_perplexity)
+      print("Test Perplexity: %.3f" % test_perplexity, flush=True)
 
       if FLAGS.save_path:
-        print("Saving model to %s." % FLAGS.save_path)
-        sv.saver.save(session, FLAGS.save_path, global_step=sv.global_step)
+        print("Saving model to %s." % FLAGS.save_path, flush=True)
+        sv.saver.save(session, FLAGS.save_path, global_step=m._global_step)
 
 
 if __name__ == "__main__":

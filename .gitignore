@@ -1,4 +1,7 @@
 .DS_Store
-_tmp_/
 __pycache__/
+datasets/
 *.ipynb
+chkps/
+logs/
+find_hyper_params.sh

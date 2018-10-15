@@ -59,14 +59,14 @@ def _parse_lines(lines, data_buf, lower=False, suffix=-1):
         val = curr_step[fld]
         cur_sent[fld].append(val)
       except KeyError:
-        cur_sent[fld].append(f"<{fld}_unk>")
+        cur_sent[fld].append(f"{fld}_unk")
   if len(cur_sent) > 0:
     _update_data_buf(data_buf, cur_sent)
 
       
 def _update_data_buf(data_buf, cur_sent):
   for fld in cur_sent:
-    eos = '<eos>' if fld == 'word' else f"<{fld}_unk>"
+    eos = '<eos>' if fld == 'word' else f"{fld}_unk"
     data_buf[fld] += (cur_sent[fld] + [eos])
 
 
@@ -95,26 +95,40 @@ def _read_words_2(filename, lower=False, to_replace='\n\n'):
       return f.read().replace(to_replace, " <eos> ").split()
 
 
-def _build_vocab(filename, additional_file=None, lower=False, with_tags_and_pos=True):
+def _build_vocab(filename, additional_file=None, lower=False, with_tags_and_pos=True, unk_with_suffix=False, min_df=None):
   data = _read_words(filename, with_tags_and_pos, lower=lower)
   word_to_id = {}
-  extra_words = []
-  if additional_file:
-    extra_words = _read_words_2(additional_file, lower)
+  letters = ['й','ц','у','к','е','н','г','ш','щ','з','х','ъ','ф','ы','в','а','п','р','о','л','д','ж','э','я','ч','с','м','и','т','ь','б','ю','ё',
+    '-','1','2','3','4','5','6','7','8','9','0','.',',','>']
+  suffixes = [f"{x+y}" for x in letters for y in letters] if unk_with_suffix else []
+  print('additional <unk_suffix> toks:', len(suffixes + letters))
+  extra_words = [f"unk_{x}" for x in suffixes + letters] if unk_with_suffix else []
+
+  if additional_file is not None:
+    extra_words += _read_words_2(additional_file, lower)
   for key, toks in data.items():
     if key == 'word':
       toks += extra_words
-    counter = collections.Counter(toks)
-    count_pairs = sorted(counter.items(), key=lambda x: (-x[1], x[0]))
+    count_pairs = collections.Counter(toks).most_common()
+    if min_df:
+      count_pairs = [(x, y) for x, y in count_pairs if y >= min_df]
     words, _ = list(zip(*count_pairs))
     word_to_id[key] = dict(zip(words, range(len(words))))
   return word_to_id
 
-def _file_to_word_ids(filename, word_to_id, with_tags_and_pos=True, lower=False):
+def _file_to_word_ids(filename, word_to_id, with_tags_and_pos=True, lower=False, unk_with_suffix=False):
   data = _read_words(filename, with_tags_and_pos, lower)
   res = {}
   for key, toks in data.items():
-    res[key] = [word_to_id[key][word] for word in toks if word in word_to_id[key]]
+    tokids = []
+    stoi = defaultdict(lambda: -1, word_to_id[key])
+    for word in toks:
+      idx = stoi[word]
+      if idx < 0 and unk_with_suffix:
+        idx = stoi[f"unk_{word[-2:]}"]
+      if idx < 0: continue
+      tokids.append(idx)
+    res[key] = tokids
   return res
 
 def ptb_raw_data(data_path=None,
@@ -124,7 +138,10 @@ def ptb_raw_data(data_path=None,
       test="gikrya_new_test.out",
       additional_file=None,
       with_tags_and_pos=True,
-      lower=True):
+      lower=True,
+      unk_with_suffix=True,
+      min_df=None,
+      vocab_save_path=''):
 
   """Load PTB raw data from data directory "data_path".
   Reads PTB text files, converts strings to integer ids,
@@ -143,10 +160,16 @@ def ptb_raw_data(data_path=None,
   valid_path = os.path.join(data_path, dev)
   test_path = os.path.join(data_path, test)
   if word_to_id is None:
-    word_to_id = _build_vocab(train_path, additional_file, lower, with_tags_and_pos)
-  train_data = _file_to_word_ids(train_path, word_to_id, with_tags_and_pos, lower)
-  valid_data = _file_to_word_ids(valid_path, word_to_id, with_tags_and_pos, lower)
-  test_data = _file_to_word_ids(test_path, word_to_id, with_tags_and_pos, lower)
+    word_to_id = _build_vocab(train_path, additional_file, lower, with_tags_and_pos, unk_with_suffix, min_df)
+    if vocab_save_path:
+      with open(vocab_save_path, 'w') as f:
+        print(word_to_id, file=f)
+  else:
+    with open(word_to_id, 'r') as f:
+      word_to_id = eval(f.read())
+  train_data = _file_to_word_ids(train_path, word_to_id, with_tags_and_pos, lower, unk_with_suffix)
+  valid_data = _file_to_word_ids(valid_path, word_to_id, with_tags_and_pos, lower, unk_with_suffix)
+  test_data = _file_to_word_ids(test_path, word_to_id, with_tags_and_pos, lower, unk_with_suffix)
   
   return train_data, valid_data, test_data, word_to_id
 

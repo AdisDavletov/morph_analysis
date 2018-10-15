@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import time
+import collections
 
 import numpy as np
 import tensorflow as tf
@@ -19,8 +20,12 @@ flags.DEFINE_string("data_path", 'datasets/',
                     "Where the training/test data is stored.")
 flags.DEFINE_string("save_path", 'chkps/_tmp_/',
                     "Model output directory.")
-flags.DEFINE_string("raw_data", '',
-                    "raw_data stored path")
+flags.DEFINE_string("train_file", 'gikrya_new_train.out',
+                    "train_data_file name")
+flags.DEFINE_string("valid_file", 'gikrya_new_test.out',
+                    "valid_data_file name")
+flags.DEFINE_string("test_file", 'gikrya_new_test.out',
+                    "test_data_file name")
 flags.DEFINE_bool("use_fp16", False,
                   "Train using 16-bit floats instead of 32-bit floats")
 flags.DEFINE_integer("num_gpus", 0,
@@ -32,8 +37,14 @@ flags.DEFINE_bool("debug", False,
 flags.DEFINE_bool("suffix_model", False,
                   "If true model would use suffix_model mode")
 
-flags.DEFINE_integer("exp_idx", 0,
-                  "Experiment index")
+flags.DEFINE_float("lr", 1.0,
+                  "Learning rate")
+flags.DEFINE_list('classifiers_to_train', ['pos','case','gender','number','animacy', 'tense','person', 'verbform','mood', 'variant','degree', 'numform'],
+                  "Classifiers to train, this defines architecture of classifiers layer")
+flags.DEFINE_bool("prediction", False,
+                  "Prediction mode to evaluate")
+flags.DEFINE_float("keep_prob", 0.5,
+                  "keep probability")
 
 FLAGS = flags.FLAGS
 
@@ -258,7 +269,7 @@ class Model(object):
     return total_sum
 
   def _add_optimizers(self, max_grad_norm, optimizer):
-    self._lr = tf.Variable(0.0, trainable=False)
+    self._lr = tf.Variable(1.0, trainable=False)
     self._new_lr = tf.placeholder(
       tf.float32, shape=[], name="new_learning_rate")
     self._lr_update = tf.assign(self._lr, self._new_lr)
@@ -402,21 +413,21 @@ class SmallConfig(object):
     self.num_steps = 35
     self.hidden_size = [640] * 2
     self.embedding_size = 640
-    self.max_epoch = 6
-    self.max_max_epoch = 40
-    self.keep_prob = {'embedding_layer':0.5, 'rnn_layer':[0.5, 0.5, 0.5]}
-    self.lr_decay = 0.8
+    self.max_epoch = 5
+    self.max_max_epoch = 5
+    self.keep_prob = {'embedding_layer':0.7, 'rnn_layer':[0.7, 0.7]}
+    self.lr_decay = 1.0
     self.batch_size = 20
-    self.vocab_size = 10000
-    self.classifiers = {
-      'pos':14,'case':7,
-      'gender':4,'number':3,
-      'animacy':3, 'tense':3,
-      'person':4, 'verbform':4,
-      'mood':3, 'variant':3,
-      'degree':3, 'numform':3}
+    self.vocab_size = None
+    self.classifiers = {}
+      # 'pos':14,'case':7,
+      # 'gender':4,'number':3,
+      # 'animacy':3, 'tense':3,
+      # 'person':4, 'verbform':4,
+      # 'mood':3, 'variant':3,
+      # 'degree':3, 'numform':3}
     self.cell_type = 'lstm_block'
-    self.weight_decay = {'lang_model':0.0002, 'classifiers':0.0002,
+    self.weight_decay = {'lang_model':0.0002, 'classifiers':0.02,
       'classifiers_with_freezed_rnn':0.0002, 'classifiers_with_freezed_rnn_embs':0.0002,
       'total':0.0002}
     self.rnn_loss_weight = 1.0
@@ -424,9 +435,12 @@ class SmallConfig(object):
     self.optimizer = 'SGD'
     self.train_op = 'classifiers'
     self.loss_to_view = 'clfs_loss'
+    self.min_df = 2
+    self.word_to_id = 'vocabularies/vocabulary'
 
   def print(self):
-    print(self.__dict__, flush=True)
+    for key in self.__dict__:
+      print(f"{key}: {self.__dict__[key]}", flush=True)
 
 
 def run_epoch(session, model, cost_name, eval_op=None, verbose=False):
@@ -470,6 +484,16 @@ def run_epoch(session, model, cost_name, eval_op=None, verbose=False):
   return np.exp(costs / iters)
 
 def predict(filename, session, model):
+  data = reader.ptb_raw_data(FLAGS.data_path,
+      word_to_id=None,
+      train=filename,
+      dev=filename,
+      test=filename,
+      additional_file=None,
+      with_tags_and_pos=True,
+      lower=True,
+      unk_with_suffix=True,
+      min_df=config.min_df)
   pass
 
 def run_op(session, op, feed_dict):
@@ -485,7 +509,6 @@ def main(_):
   
   if not FLAGS.data_path:
     raise ValueError("Must set --data_path to data directory")
-  print(FLAGS.data_path)
   gpus = [
       x.name for x in device_lib.list_local_devices() if x.device_type == "GPU"
   ]
@@ -495,31 +518,47 @@ def main(_):
         "which is less than the requested --num_gpus=%d."
         % (len(gpus), FLAGS.num_gpus))
 
-  raw_data = reader.ptb_raw_data(FLAGS.data_path,
-      word_to_id=None,
-      train="gikrya_new_train.out",
-      dev="gikrya_new_test.out",
-      test="gikrya_new_test.out",
-      additional_file=None,
-      with_tags_and_pos=True,
-      lower=True)
+  train_data = FLAGS.train_file
+  valid_data = FLAGS.valid_file
+  test_data = FLAGS.test_file
 
-  train_data, valid_data, test_data, word_to_id = raw_data
-
+  print(f'root_folder:{FLAGS.data_path}|train_file:{train_data}|valid_file:{valid_data}|test_file:{test_data}')
   config = get_config()
   eval_config = get_config()
   eval_config.batch_size = 1
 
-  vocabularies_size = []
-  for key in word_to_id:
-    if key != 'word':
-      config.classifiers[key] = len(word_to_id[key])
-      eval_config.classifiers[key] = len(word_to_id[key])
-    else:
-      config.vocab_size = len(word_to_id[key])
-      eval_config.vocab_size = len(word_to_id[key])
-    vocabularies_size += [f'{key}:{len(word_to_id[key])}']
-  print(f"{'|'.join(vocabularies_size)}\n\n", flush=True)
+  word_to_id = config.word_to_id if FLAGS.prediction else None
+  raw_data = reader.ptb_raw_data(FLAGS.data_path,
+      word_to_id=word_to_id,
+      train=train_data,
+      dev=valid_data,
+      test=test_data,
+      additional_file=None,
+      with_tags_and_pos=True,
+      lower=True,
+      unk_with_suffix=True,
+      min_df=config.min_df,
+      vocab_save_path=config.word_to_id)
+
+  train_data, valid_data, test_data, word_to_id = raw_data
+  # id_to_word = collections.defaultdict(lambda: 'unkkkkk', [(y, x) for x, y in word_to_id['word'].items()])
+  # print([id_to_word[x] for x in test_data['word'][-500:]])
+  
+  if not FLAGS.prediction:
+    config.learning_rate = FLAGS.lr
+    eval_config.learning_rate = FLAGS.lr
+
+    config.keep_prob = {'embedding_layer':FLAGS.keep_prob, 'rnn_layer':[FLAGS.keep_prob] * config.num_layers}
+    vocabularies_size = []
+    for key in word_to_id:
+      if (key != 'word') and (key in FLAGS.classifiers_to_train):
+        config.classifiers[key] = len(word_to_id[key])
+        eval_config.classifiers[key] = len(word_to_id[key])
+      elif key == 'word':
+        config.vocab_size = len(word_to_id[key])
+        eval_config.vocab_size = len(word_to_id[key])
+      vocabularies_size += [f'{key}:{len(word_to_id[key])}']
+    print(f"{'|'.join(vocabularies_size)}", flush=True)
 
   config.print()
   with tf.Graph().as_default():

@@ -102,6 +102,7 @@ class Model(object):
       self._logits.update({'word_target': logits})
     with tf.variable_scope("clfs_part", reuse=tf.AUTO_REUSE):
       self._add_classifiers(config.classifiers)
+    self._add_predictions()
 
     self._collect_trainable_variables()
     self._add_losses()
@@ -294,6 +295,15 @@ class Model(object):
       raise ValueError('Not supposed optimizer!')
     return optimizer
 
+  def _add_predictions(self):
+    self._predictions = {}
+    for clf in self._logits: # bs x seq_len x logits_size
+      if clf == 'word_target': continue
+      preds = tf.nn.softmax(self._logits[clf], axis=2, name=f"softmax_{clf}")
+      self._predictions[clf] = tf.argmax(preds,
+        axis=2, name=f"argmax_{clf}",
+        output_type=tf.int32)
+
   def assign_lr(self, session, lr_value):
     session.run(self._lr_update, feed_dict={self._new_lr: lr_value})
 
@@ -316,6 +326,9 @@ class Model(object):
     ops = {}
     ops[util.with_prefix(self._name, 'clfs_padd')] = self._padding
     ops[util.with_prefix(self._name, 'last_step')] = self._last_step
+    for key, preds in self._predictions.items():
+      ops[util.with_prefix(self._name, key)] = preds
+    self._exported_ops.update({'predictions': [f'{self._name}/{k}' for k in self._predictions]})
     for key, loss in self._losses.items():
       ops[util.with_prefix(self._name, key)] = loss
     for key, loss in self._l2_losses.items():
@@ -362,7 +375,8 @@ class Model(object):
       self._losses[key.split('/')[1]] = tf.get_collection_ref(key)[0]
     for key in self._exported_ops['l2_losses']:
       self._l2_losses[key.split('/')[1]] = tf.get_collection_ref(key)[0]
-
+    for key in self._exported_ops['predictions']:
+      self._predictions[key.split('/')[1]] = tf.get_collection_ref(key)[0]
     num_replicas = FLAGS.num_gpus if self._name == "Train" else 1
     self._initial_state = util.import_state_tuples(
         self._initial_state, self._initial_state_name, num_replicas)
@@ -419,13 +433,13 @@ class SmallConfig(object):
     self.lr_decay = 1.0
     self.batch_size = 20
     self.vocab_size = None
-    self.classifiers = {}
-      # 'pos':14,'case':7,
-      # 'gender':4,'number':3,
-      # 'animacy':3, 'tense':3,
-      # 'person':4, 'verbform':4,
-      # 'mood':3, 'variant':3,
-      # 'degree':3, 'numform':3}
+    self.classifiers = {
+      'pos':14,'case':7,
+      'gender':4,'number':3,
+      'animacy':3, 'tense':3,
+      'person':4, 'verbform':4,
+      'mood':3, 'variant':3,
+      'degree':3, 'numform':3}
     self.cell_type = 'lstm_block'
     self.weight_decay = {'lang_model':0.0002, 'classifiers':0.02,
       'classifiers_with_freezed_rnn':0.0002, 'classifiers_with_freezed_rnn_embs':0.0002,
@@ -483,18 +497,25 @@ def run_epoch(session, model, cost_name, eval_op=None, verbose=False):
 
   return np.exp(costs / iters)
 
-def predict(filename, session, model):
-  data = reader.ptb_raw_data(FLAGS.data_path,
-      word_to_id=None,
-      train=filename,
-      dev=filename,
-      test=filename,
-      additional_file=None,
-      with_tags_and_pos=True,
-      lower=True,
-      unk_with_suffix=True,
-      min_df=config.min_df)
-  pass
+def predict(session, model, classifiers, id_to_word, file='predicted.out'):
+  predictions = collections.defaultdict(lambda:[])
+  for step in range(model.input.epoch_size):
+    preds = session.run(fetches=model._predictions)
+
+    for x in preds['case'][0]:
+      print(id_to_word[x])
+
+    for clf in preds:
+      predictions[clf].append(preds[clf])
+
+  for clf in predictions:
+    predictions[key] = np.concatenate(predictions[key], axis=1)
+    predictions[key] = predictions[key].reshape(shape=[1,-1])
+
+  for clf in predictions:
+    for x in predictions[clf]:
+      print(id_to_word[x])
+  return predictions
 
 def run_op(session, op, feed_dict):
   res = session.run(op, feed_dict=feed_dict)
@@ -528,23 +549,25 @@ def main(_):
   eval_config.batch_size = 1
 
   word_to_id = config.word_to_id if FLAGS.prediction else None
+  with_tags_and_pos = False if FLAGS.prediction else True
+
   raw_data = reader.ptb_raw_data(FLAGS.data_path,
       word_to_id=word_to_id,
       train=train_data,
       dev=valid_data,
       test=test_data,
       additional_file=None,
-      with_tags_and_pos=True,
+      with_tags_and_pos=with_tags_and_pos,
       lower=True,
       unk_with_suffix=True,
       min_df=config.min_df,
       vocab_save_path=config.word_to_id)
 
   train_data, valid_data, test_data, word_to_id = raw_data
-  # id_to_word = collections.defaultdict(lambda: 'unkkkkk', [(y, x) for x, y in word_to_id['word'].items()])
-  # print([id_to_word[x] for x in test_data['word'][-500:]])
+  id_to_word = collections.defaultdict(lambda: '<unk>', [(y, x) for x, y in word_to_id['word'].items()])
   
   if not FLAGS.prediction:
+    config.classifiers, eval_config.classifiers = {}, {}
     config.learning_rate = FLAGS.lr
     eval_config.learning_rate = FLAGS.lr
 
@@ -603,22 +626,27 @@ def main(_):
       model.import_ops()
     config_proto = tf.ConfigProto(allow_soft_placement=soft_placement)
     with tf.train.MonitoredTrainingSession(config=config_proto, checkpoint_dir=FLAGS.save_path) as session:
-      for i in range(config.max_max_epoch):
-        lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
-        m.assign_lr(session, config.learning_rate * lr_decay)
-        print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)), flush=True)
-        train_perplexity = run_epoch(session, m, config.loss_to_view, eval_op=m.train_ops[config.train_op],
-                                     verbose=True)
-        print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity), flush=True)
-        valid_perplexity = run_epoch(session, mvalid, config.loss_to_view)
-        print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity), flush=True)
+      if not FLAGS.prediction:
+        # predict(session, mtest, FLAGS.classifiers_to_train, id_to_word)
+        # exit(0)
+        for i in range(config.max_max_epoch):
+          lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
+          m.assign_lr(session, config.learning_rate * lr_decay)
+          print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)), flush=True)
+          train_perplexity = run_epoch(session, m, config.loss_to_view, eval_op=m.train_ops[config.train_op],
+                                       verbose=True)
+          print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity), flush=True)
+          valid_perplexity = run_epoch(session, mvalid, config.loss_to_view)
+          print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity), flush=True)
 
-      test_perplexity = run_epoch(session, mtest, config.loss_to_view)
-      print("Test Perplexity: %.3f" % test_perplexity, flush=True)
+        test_perplexity = run_epoch(session, mtest, config.loss_to_view)
+        print("Test Perplexity: %.3f" % test_perplexity, flush=True)
 
-      if FLAGS.save_path:
-        print("Saving model to %s." % FLAGS.save_path, flush=True)
-        sv.saver.save(session, FLAGS.save_path, global_step=m._global_step)
+        if FLAGS.save_path:
+          print("Saving model to %s." % FLAGS.save_path, flush=True)
+          sv.saver.save(session, FLAGS.save_path, global_step=m._global_step)
+      else:
+        predict(session, mtest, FLAGS.classifiers_to_train, id_to_word)
 
 
 if __name__ == "__main__":

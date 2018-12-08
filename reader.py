@@ -22,6 +22,7 @@ from __future__ import print_function
 import collections
 import os
 import sys
+import pickle
 
 from collections import defaultdict
 
@@ -95,14 +96,16 @@ def _read_words_2(filename, lower=False, to_replace='\n\n'):
       return f.read().replace(to_replace, " <eos> ").split()
 
 
-def _build_vocab(filename, additional_file=None, lower=False, with_tags_and_pos=True, unk_with_suffix=False, min_df=None):
+def _build_vocab(filename, additional_file=None, lower=False, with_tags_and_pos=True, unk_with_suffix=False, min_tf=None):
   data = _read_words(filename, with_tags_and_pos, lower=lower)
   word_to_id = {}
   letters = ['й','ц','у','к','е','н','г','ш','щ','з','х','ъ','ф','ы','в','а','п','р','о','л','д','ж','э','я','ч','с','м','и','т','ь','б','ю','ё',
     '-','1','2','3','4','5','6','7','8','9','0','.',',','>']
   suffixes = [f"{x+y}" for x in letters for y in letters] if unk_with_suffix else []
-  print('additional <unk_suffix> toks:', len(suffixes + letters))
+  if unk_with_suffix:
+    print('additional <unk_suffix> toks:', len(suffixes + letters))
   extra_words = [f"unk_{x}" for x in suffixes + letters] if unk_with_suffix else []
+  extra_words.append('<unk>')
 
   if additional_file is not None:
     extra_words += _read_words_2(additional_file, lower)
@@ -110,8 +113,8 @@ def _build_vocab(filename, additional_file=None, lower=False, with_tags_and_pos=
     if key == 'word':
       toks += extra_words
     count_pairs = collections.Counter(toks).most_common()
-    if min_df:
-      count_pairs = [(x, y) for x, y in count_pairs if y >= min_df]
+    if min_tf:
+      count_pairs = [(x, y) for x, y in count_pairs if (y >= min_tf or x == '<unk>' or x.startswith('unk_'))]
     words, _ = list(zip(*count_pairs))
     word_to_id[key] = dict(zip(words, range(len(words))))
   return word_to_id
@@ -121,12 +124,17 @@ def _file_to_word_ids(filename, word_to_id, with_tags_and_pos=True, lower=False,
   res = {}
   for key, toks in data.items():
     tokids = []
-    stoi = defaultdict(lambda: -1, word_to_id[key])
+    stoi = defaultdict(lambda: -1, word_to_id[key].copy())
     for word in toks:
       idx = stoi[word]
-      if idx < 0 and unk_with_suffix:
-        idx = stoi[f"unk_{word[-2:]}"]
-      if idx < 0: continue
+      if key == 'word' and idx < 0:
+        if unk_with_suffix:
+          idx = stoi[f"unk_{word[-2:]}"]
+          idx = idx if idx > 0 else stoi['<unk>']
+        else:
+          idx = stoi['<unk>']
+      if idx == -1 and key != 'word':
+        print('dsfsdfdsfdsfdsdsgdsgdsfdsfsdfdsfdsrgsdfdsf')
       tokids.append(idx)
     res[key] = tokids
   return res
@@ -140,7 +148,7 @@ def ptb_raw_data(data_path=None,
       with_tags_and_pos=True,
       lower=True,
       unk_with_suffix=True,
-      min_df=None,
+      min_tf=None,
       vocab_save_path=''):
 
   """Load PTB raw data from data directory "data_path".
@@ -160,13 +168,15 @@ def ptb_raw_data(data_path=None,
   valid_path = os.path.join(data_path, dev)
   test_path = os.path.join(data_path, test)
   if word_to_id is None:
-    word_to_id = _build_vocab(train_path, additional_file, lower, with_tags_and_pos, unk_with_suffix, min_df)
+    word_to_id = _build_vocab(train_path, additional_file, lower, with_tags_and_pos, unk_with_suffix, min_tf)
     if vocab_save_path:
-      with open(vocab_save_path, 'w') as f:
-        print(word_to_id, file=f)
+      with open(vocab_save_path, 'wb') as f:
+        pickle.dump(word_to_id, f, -1)
+        # print(word_to_id, file=f)
   else:
-    with open(word_to_id, 'r') as f:
-      word_to_id = eval(f.read())
+    with open(word_to_id, 'rb') as f:
+      word_to_id = pickle.load(f)
+      # word_to_id = eval(f.read())
   train_data = _file_to_word_ids(train_path, word_to_id, with_tags_and_pos, lower, unk_with_suffix)
   valid_data = _file_to_word_ids(valid_path, word_to_id, with_tags_and_pos, lower, unk_with_suffix)
   test_data = _file_to_word_ids(test_path, word_to_id, with_tags_and_pos, lower, unk_with_suffix)

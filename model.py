@@ -414,43 +414,71 @@ class Model(object):
   def get_cost(self, cost_name):
     return self._losses[cost_name]
   
-  
-
 
 class SmallConfig(object):
   """Small config."""
-  def __init__(self):
-    self.init_scale = 0.1
-    self.learning_rate = 0.5
-    self.max_grad_norm = 5
-    self.num_layers = 2
-    self.num_steps = 35
-    self.hidden_size = [640] * 2
-    self.embedding_size = 640
-    self.max_epoch = 5
-    self.max_max_epoch = 5
-    self.keep_prob = {'embedding_layer':0.7, 'rnn_layer':[0.7, 0.7]}
-    self.lr_decay = 1.0
-    self.batch_size = 20
-    self.vocab_size = None
-    self.classifiers = {
-      'pos':14,'case':7,
-      'gender':4,'number':3,
-      'animacy':3, 'tense':3,
-      'person':4, 'verbform':4,
-      'mood':3, 'variant':3,
-      'degree':3, 'numform':3}
-    self.cell_type = 'lstm_block'
-    self.weight_decay = {'lang_model':0.0002, 'classifiers':0.02,
-      'classifiers_with_freezed_rnn':0.0002, 'classifiers_with_freezed_rnn_embs':0.0002,
-      'total':0.0002}
-    self.rnn_loss_weight = 1.0
-    self.clfs_loss_weight = 1.0
-    self.optimizer = 'SGD'
-    self.train_op = 'classifiers'
-    self.loss_to_view = 'clfs_loss'
-    self.min_df = 2
-    self.word_to_id = 'vocabularies/vocabulary'
+  def __init__(
+      self,
+      init_scale=0.1,
+      learning_rate=1.0,
+      max_grad_norm=5,
+      num_layers=2,
+      num_steps=35,
+      hidden_size=640,
+      embedding_size=640,
+      max_epoch=10,
+      max_max_epoch=39,
+      keep_prob={'embedding_layer':0.5,'rnn_layer':[0.5, 0.5]},
+      lr_decay=0.95,
+      batch_size=20,
+      vocab_size=46099,
+      classifiers={
+        'pos':14,'case':7,
+        'gender':4,'number':3,
+        'animacy':3, 'tense':3,
+        'person':4, 'verbform':4,
+        'mood':3, 'variant':3,
+        'degree':3, 'numform':3},
+      cell_type='lstm_block',
+      weight_decay={
+        'lang_model':0.0002,
+        'classifiers':0.002,
+        'classifiers_with_freezed_rnn':0.0002,
+        'classifiers_with_freezed_rnn_embs':0.0002,
+        'total':0.0002
+      },
+      rnn_loss_weight=1.,
+      clfs_loss_weight=1.,
+      optimizer='SGD',
+      train_op='lang_model',
+      loss_to_view='word_target_loss_l2_reg',
+      min_tf=2,
+      word_to_id='vocabularies/vocabulary'
+    ):
+    self.init_scale = init_scale
+    self.learning_rate = learning_rate
+    self.max_grad_norm = max_grad_norm
+    self.num_layers = num_layers
+    self.num_steps = num_steps
+    self.hidden_size = [hidden_size] * num_layers
+    self.embedding_size = embedding_size
+    self.max_epoch = max_epoch
+    self.max_max_epoch = max_max_epoch
+    self.keep_prob = keep_prob
+    self.lr_decay = lr_decay
+    self.batch_size = batch_size
+    self.vocab_size = vocab_size
+    self.classifiers = classifiers
+    self.cell_type = cell_type
+    self.weight_decay = weight_decay
+    self.rnn_loss_weight = rnn_loss_weight
+    self.clfs_loss_weight = clfs_loss_weight
+    self.optimizer = optimizer
+    self.train_op = train_op
+    self.loss_to_view = loss_to_view
+    self.min_tf = min_tf
+    self.word_to_id = word_to_id
+
 
   def print(self):
     for key in self.__dict__:
@@ -497,33 +525,56 @@ def run_epoch(session, model, cost_name, eval_op=None, verbose=False):
 
   return np.exp(costs / iters)
 
-def predict(session, model, classifiers, id_to_word, file='predicted.out'):
+def predict(session, model, classifiers, word_to_id, file='predicted.out'):
+  state = session.run(model.initial_state)
+  id_to_word = {}
+  start = True
+  for key in word_to_id:
+    if key != 'word':
+      id_to_word[key] = dict([(y, x) for x, y in word_to_id[key].items()])
   predictions = collections.defaultdict(lambda:[])
-  for step in range(model.input.epoch_size):
-    preds = session.run(fetches=model._predictions)
 
-    for x in preds['case'][0]:
-      print(id_to_word[x])
+  fetches = {"final_state": model.final_state, 'preds': model._predictions, 'padding': model._last_step}
+  for step in range(model.input.epoch_size):
+    feed_dict = {}
+    for i, (c, h) in enumerate(model.initial_state):
+      feed_dict[c] = state[i].c
+      feed_dict[h] = state[i].h
+    if not start:
+      feed_dict[model._padding] = vals['padding']
+    else:
+      start = False
+      feed_dict[model._padding] = np.zeros(shape=[model.batch_size, 1, model._rnn_out_size], dtype=np.float32)
+
+    vals = session.run(fetches, feed_dict)
+
+    preds = vals['preds']
+    state = vals['final_state']
+
+    # for x in preds['case'][0]:
+    #   print(id_to_word[key][x])
 
     for clf in preds:
       predictions[clf].append(preds[clf])
 
   for clf in predictions:
-    predictions[key] = np.concatenate(predictions[key], axis=1)
-    predictions[key] = predictions[key].reshape(shape=[1,-1])
+    predictions[clf] = np.concatenate(predictions[clf], axis=1)
+    predictions[clf] = predictions[clf].reshape([1,-1])
 
   for clf in predictions:
-    for x in predictions[clf]:
-      print(id_to_word[x])
+    print(clf)
+    for x in predictions[clf][0,:50]:
+      print(id_to_word[clf][x], sep=' ')
+
   return predictions
 
 def run_op(session, op, feed_dict):
   res = session.run(op, feed_dict=feed_dict)
   return res
 
-def get_config(debug=False):
+def get_config(**kwargs):
   """Get model config."""
-  return SmallConfig()
+  return SmallConfig(**kwargs)
 
 
 def main(_):
@@ -544,15 +595,17 @@ def main(_):
   test_data = FLAGS.test_file
 
   print(f'root_folder:{FLAGS.data_path}|train_file:{train_data}|valid_file:{valid_data}|test_file:{test_data}')
-  config = get_config()
-  eval_config = get_config()
+  config = get_config(train_op='total', loss_to_view='total_loss', max_max_epoch=60)
+  eval_config = get_config(train_op='total', loss_to_view='total_loss', max_max_epoch=60)
   eval_config.batch_size = 1
 
-  word_to_id = config.word_to_id if FLAGS.prediction else None
-  with_tags_and_pos = False if FLAGS.prediction else True
+  word_to_id = config.word_to_id #if FLAGS.prediction else None
+  # with_tags_and_pos = False if FLAGS.prediction else True
+  with_tags_and_pos = True
 
   raw_data = reader.ptb_raw_data(FLAGS.data_path,
       word_to_id=word_to_id,
+      # word_to_id=None,
       train=train_data,
       dev=valid_data,
       test=test_data,
@@ -560,7 +613,7 @@ def main(_):
       with_tags_and_pos=with_tags_and_pos,
       lower=True,
       unk_with_suffix=True,
-      min_df=config.min_df,
+      min_tf=config.min_tf,
       vocab_save_path=config.word_to_id)
 
   train_data, valid_data, test_data, word_to_id = raw_data
@@ -646,8 +699,7 @@ def main(_):
           print("Saving model to %s." % FLAGS.save_path, flush=True)
           sv.saver.save(session, FLAGS.save_path, global_step=m._global_step)
       else:
-        predict(session, mtest, FLAGS.classifiers_to_train, id_to_word)
-
+        predict(session, mtest, FLAGS.classifiers_to_train, word_to_id)
 
 if __name__ == "__main__":
   tf.app.run()

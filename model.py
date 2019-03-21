@@ -2,16 +2,15 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import time
 import collections
+import time
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.client import device_lib
 
 import reader
 import util
-
-from tensorflow.python.client import device_lib
 
 flags = tf.flags
 logging = tf.logging
@@ -38,15 +37,18 @@ flags.DEFINE_bool("suffix_model", False,
                   "If true model would use suffix_model mode")
 
 flags.DEFINE_float("lr", 1.0,
-                  "Learning rate")
-flags.DEFINE_list('classifiers_to_train', ['pos','case','gender','number','animacy', 'tense','person', 'verbform','mood', 'variant','degree', 'numform'],
+                   "Learning rate")
+flags.DEFINE_list('classifiers_to_train',
+                  ['pos', 'case', 'gender', 'number', 'animacy', 'tense', 'person', 'verbform', 'mood', 'variant',
+                   'degree', 'numform'],
                   "Classifiers to train, this defines architecture of classifiers layer")
 flags.DEFINE_bool("prediction", False,
                   "Prediction mode to evaluate")
 flags.DEFINE_float("keep_prob", 0.5,
-                  "keep probability")
+                   "keep probability")
 
 FLAGS = flags.FLAGS
+
 
 def data_type():
   return tf.float16 if FLAGS.use_fp16 else tf.float32
@@ -60,7 +62,7 @@ class Input(object):
     self.num_steps = num_steps = config.num_steps
     self.epoch_size = ((len(data['word']) // batch_size) - 1) // num_steps
     self.input_data = reader.ptb_producer(
-        data, batch_size, num_steps, name=name)
+      data, batch_size, num_steps, name=name)
 
 
 class Model(object):
@@ -96,8 +98,8 @@ class Model(object):
       output = tf.reshape(output, [-1, self._rnn_out_size])
 
       logits = self._add_clf_layer(output, self._rnn_out_size,
-        config.vocab_size if not FLAGS.suffix_model else config.suffix_size,
-        layer_name='lm_layer')
+                                   config.vocab_size if not FLAGS.suffix_model else config.suffix_size,
+                                   layer_name='lm_layer')
 
       self._logits.update({'word_target': logits})
     with tf.variable_scope("clfs_part", reuse=tf.AUTO_REUSE):
@@ -109,38 +111,38 @@ class Model(object):
     self._add_l2_losses(config.weight_decay)
 
     self._losses.update({'clfs_loss':
-      self._weighted_losses_sum([(f'{clf}_loss', 1) for clf in config.classifiers])})
+                           self._weighted_losses_sum([(f'{clf}_loss', 1) for clf in config.classifiers])})
 
     self._losses.update({'word_target_loss_l2_reg': self._losses['word_target_loss'] + \
-      self._l2_losses['lang_model']})
+                                                    self._l2_losses['lang_model']})
 
     self._losses.update({'clfs_loss_l2_reg': self._losses['clfs_loss'] + \
-      self._l2_losses['classifiers']})
+                                             self._l2_losses['classifiers']})
 
     self._losses.update({'clfs_loss_withfreezedrnn_l2_reg': self._losses['clfs_loss'] + \
-      self._l2_losses['classifiers_with_freezed_rnn']})
+                                                            self._l2_losses['classifiers_with_freezed_rnn']})
 
     self._losses.update({'clfs_loss_withfreezedrnnembs_l2_reg': self._losses['clfs_loss'] + \
-      self._l2_losses['classifiers_with_freezed_rnn_embs']})
+                                                                self._l2_losses['classifiers_with_freezed_rnn_embs']})
 
     self._losses.update({'total_loss':
-      self._weighted_losses_sum([('word_target_loss', config.rnn_loss_weight),
-        ('clfs_loss', config.clfs_loss_weight)])})
+                           self._weighted_losses_sum([('word_target_loss', config.rnn_loss_weight),
+                                                      ('clfs_loss', config.clfs_loss_weight)])})
     self._losses.update({'total_loss_l2_reg':
-      self._weighted_losses_sum([('word_target_loss_l2_reg', config.rnn_loss_weight),
-        ('clfs_loss_l2_reg', config.clfs_loss_weight)])})
+                           self._weighted_losses_sum([('word_target_loss_l2_reg', config.rnn_loss_weight),
+                                                      ('clfs_loss_l2_reg', config.clfs_loss_weight)])})
 
     self._losses_for_train = {}
     losses = ['word_target_loss_l2_reg', 'clfs_loss_l2_reg', 'clfs_loss_withfreezedrnn_l2_reg',
-      'clfs_loss_withfreezedrnnembs_l2_reg', 'total_loss_l2_reg']
+              'clfs_loss_withfreezedrnnembs_l2_reg', 'total_loss_l2_reg']
     assoc_names = ['lang_model', 'classifiers', 'classifiers_with_freezed_rnn',
-      'classifiers_with_freezed_rnn_embs', 'total']
+                   'classifiers_with_freezed_rnn_embs', 'total']
     for new_name, old_name in zip(assoc_names, losses):
       self._losses_for_train[new_name] = self._losses[old_name]
 
     if self._is_training:
       self._add_optimizers(config.max_grad_norm, config.optimizer)
-  
+
   def _init_global_step_and_epoch(self):
     self._global_step = tf.train.get_or_create_global_step()
     self._cur_epoch = tf.get_variable('epoch', dtype=tf.int32, initializer=0, trainable=False)
@@ -151,7 +153,7 @@ class Model(object):
   def _add_embed_layer(self, vocab_size, embedding_size, keep_prob):
     with tf.device("/cpu:0"):
       embedding = tf.get_variable(
-          "embedding", [vocab_size, embedding_size], dtype=data_type())
+        "embedding", [vocab_size, embedding_size], dtype=data_type())
       inputs = tf.nn.embedding_lookup(embedding, self._input.input_data['word'])
 
     if self._is_training and keep_prob < 1:
@@ -160,6 +162,7 @@ class Model(object):
 
   def _add_rnn_layer(self, inputs, num_layers, keep_prob, hidden_size, cell_type):
     """add the inference graph using canonical LSTM cells."""
+
     # Slightly better results can be obtained with forget gate biases
     # initialized to 1 but the hyperparameters of the model would need to be
     # different than reported in the paper.
@@ -173,29 +176,32 @@ class Model(object):
 
       if self._is_training and keep_prob[layer] < 1:
         cell = tf.contrib.rnn.DropoutWrapper(
-            cell, output_keep_prob=keep_prob[layer])
+          cell, output_keep_prob=keep_prob[layer])
       return cell
 
     cell = tf.contrib.rnn.MultiRNNCell(
-        [make_cell(i) for i in range(num_layers)], state_is_tuple=True)
+      [make_cell(i) for i in range(num_layers)], state_is_tuple=True)
 
     self._initial_state = cell.zero_state(self.batch_size, data_type())
 
     inputs = tf.unstack(inputs, num=self.num_steps, axis=1)
     outputs, self._final_state = tf.nn.static_rnn(cell, inputs,
-                                      initial_state=self._initial_state)
+                                                  initial_state=self._initial_state)
     output = tf.concat(outputs, axis=1)
     self._rnn_output = tf.reshape(output, [self.batch_size, self.num_steps, self._rnn_out_size])
 
     return output
 
   def _add_classifiers(self, classifiers):
-    self._padding = tf.get_variable(name=f'{self._name}_clfs_padd', shape=[self._rnn_output.get_shape()[0], 1, self._rnn_out_size],
-      dtype=data_type(), trainable=False)
-    self._last_step = tf.strided_slice(self._rnn_output, [0, self.num_steps-1, 0],
-      [self.batch_size, self.num_steps, self._rnn_out_size], name=f'{self._name}_last_step')
+    self._padding = tf.get_variable(name=f'{self._name}_clfs_padd',
+                                    shape=[self._rnn_output.get_shape()[0], 1, self._rnn_out_size],
+                                    dtype=data_type(), trainable=False)
+    self._last_step = tf.strided_slice(self._rnn_output, [0, self.num_steps - 1, 0],
+                                       [self.batch_size, self.num_steps, self._rnn_out_size],
+                                       name=f'{self._name}_last_step')
     prev_output = tf.concat([self._padding, tf.strided_slice(self._rnn_output,
-        [0, 0, 0], [self.batch_size, self.num_steps-1, self._rnn_out_size])], axis=1)
+                                                             [0, 0, 0], [self.batch_size, self.num_steps - 1,
+                                                                         self._rnn_out_size])], axis=1)
     prev_output.set_shape([self.batch_size, self.num_steps, self._rnn_out_size])
     inputs = tf.concat([prev_output, self._rnn_output], axis=2)
     if self.debug: print('shape of the inputs to classifier layers:', inputs.get_shape(), flush=True)
@@ -210,7 +216,7 @@ class Model(object):
 
   def _add_clf_layer(self, inputs, in_size, out_size, layer_name):
     weights = tf.get_variable(
-        layer_name + '_w', [in_size, out_size], dtype=data_type())
+      layer_name + '_w', [in_size, out_size], dtype=data_type())
     bias = tf.get_variable(layer_name + "_b", [out_size], dtype=data_type())
 
     logits = tf.nn.xw_plus_b(inputs, weights, bias)
@@ -222,10 +228,10 @@ class Model(object):
   def _collect_trainable_variables(self):
     scope = tf.get_variable_scope().name
     self._tvars = {}
-    self._tvars['emb_part'] = tf.trainable_variables(scope=f"{scope+'/' if scope else ''}emb_part")
-    self._tvars['rnn_part'] = tf.trainable_variables(scope=f"{scope+'/' if scope else ''}rnn_part")
-    self._tvars['lm_part'] = tf.trainable_variables(scope=f"{scope+'/' if scope else ''}lm_part")
-    self._tvars['clfs_part'] = tf.trainable_variables(scope=f"{scope+'/' if scope else ''}clfs_part")
+    self._tvars['emb_part'] = tf.trainable_variables(scope=f"{scope + '/' if scope else ''}emb_part")
+    self._tvars['rnn_part'] = tf.trainable_variables(scope=f"{scope + '/' if scope else ''}rnn_part")
+    self._tvars['lm_part'] = tf.trainable_variables(scope=f"{scope + '/' if scope else ''}lm_part")
+    self._tvars['clfs_part'] = tf.trainable_variables(scope=f"{scope + '/' if scope else ''}clfs_part")
 
     tvars = self._tvars
     self._for_train = {}
@@ -234,7 +240,7 @@ class Model(object):
     self._for_train['classifiers_with_freezed_rnn'] = tvars['emb_part'] + tvars['clfs_part']
     self._for_train['classifiers_with_freezed_rnn_embs'] = tvars['clfs_part']
     self._for_train['total'] = tvars['emb_part'] + tvars['rnn_part'] + \
-      tvars['lm_part'] + tvars['clfs_part']
+                               tvars['lm_part'] + tvars['clfs_part']
 
   def _add_losses(self):
     for name, logits in self._logits.items():
@@ -245,12 +251,12 @@ class Model(object):
   def _add_loss(self, answers, targets, name):
     # Use the contrib sequence loss and average over the batches
     loss = tf.contrib.seq2seq.sequence_loss(
-        logits=answers,
-        targets=targets,
-        weights=tf.ones([self.batch_size, self.num_steps], dtype=data_type()),
-        average_across_timesteps=False,
-        average_across_batch=True,
-        name=name)
+      logits=answers,
+      targets=targets,
+      weights=tf.ones([self.batch_size, self.num_steps], dtype=data_type()),
+      average_across_timesteps=False,
+      average_across_batch=True,
+      name=name)
 
     return tf.reduce_sum(loss)
 
@@ -261,7 +267,6 @@ class Model(object):
       for i, var in enumerate(tvars):
         l2_loss += tf.nn.l2_loss(var, name=f'{name}_{i}')
       self._l2_losses[name] = l2_loss * weight_decay[name]
-
 
   def _weighted_losses_sum(self, names_with_weights):
     total_sum = tf.constant(0.0)
@@ -297,12 +302,12 @@ class Model(object):
 
   def _add_predictions(self):
     self._predictions = {}
-    for clf in self._logits: # bs x seq_len x logits_size
+    for clf in self._logits:  # bs x seq_len x logits_size
       if clf == 'word_target': continue
       preds = tf.nn.softmax(self._logits[clf], axis=2, name=f"softmax_{clf}")
       self._predictions[clf] = tf.argmax(preds,
-        axis=2, name=f"argmax_{clf}",
-        output_type=tf.int32)
+                                         axis=2, name=f"argmax_{clf}",
+                                         output_type=tf.int32)
 
   def assign_lr(self, session, lr_value):
     session.run(self._lr_update, feed_dict={self._new_lr: lr_value})
@@ -334,17 +339,17 @@ class Model(object):
     for key, loss in self._l2_losses.items():
       ops[util.with_prefix(self._name, key)] = loss
     self._exported_ops.update({'losses': [f'{self._name}/{k}' for k in self._losses.keys()],
-      'l2_losses': [f'{self._name}/{k}' for k in self._l2_losses.keys()]})
+                               'l2_losses': [f'{self._name}/{k}' for k in self._l2_losses.keys()]})
     ops.update({f'{name}/cur_epoch': self._cur_epoch,
-      f'{name}/global_step': self._global_step})
+                f'{name}/global_step': self._global_step})
     self._exported_ops.update({'epoch_and_step': [f'{name}/cur_epoch', f'{name}/global_step']})
     if self._is_training:
       for key, train_op in self._train_ops.items():
         ops[key] = train_op
       self._exported_ops.update({'train_ops': self._train_ops.keys()})
       ops.update(lr=self._lr, new_lr=self._new_lr, lr_update=self._lr_update,
-        new_val=self._new_val, update_epoch=self._update_epoch)
-      
+                 new_val=self._new_val, update_epoch=self._update_epoch)
+
     for name, op in ops.items():
       tf.add_to_collection(name, op)
 
@@ -379,9 +384,9 @@ class Model(object):
       self._predictions[key.split('/')[1]] = tf.get_collection_ref(key)[0]
     num_replicas = FLAGS.num_gpus if self._name == "Train" else 1
     self._initial_state = util.import_state_tuples(
-        self._initial_state, self._initial_state_name, num_replicas)
+      self._initial_state, self._initial_state_name, num_replicas)
     self._final_state = util.import_state_tuples(
-        self._final_state, self._final_state_name, num_replicas)
+      self._final_state, self._final_state_name, num_replicas)
 
   @property
   def input(self):
@@ -413,10 +418,11 @@ class Model(object):
 
   def get_cost(self, cost_name):
     return self._losses[cost_name]
-  
+
 
 class SmallConfig(object):
   """Small config."""
+
   def __init__(
       self,
       init_scale=0.1,
@@ -428,24 +434,24 @@ class SmallConfig(object):
       embedding_size=640,
       max_epoch=10,
       max_max_epoch=39,
-      keep_prob={'embedding_layer':0.5,'rnn_layer':[0.5, 0.5]},
+      keep_prob={'embedding_layer': 0.5, 'rnn_layer': [0.5, 0.5]},
       lr_decay=0.95,
       batch_size=20,
       vocab_size=46099,
       classifiers={
-        'pos':14,'case':7,
-        'gender':4,'number':3,
-        'animacy':3, 'tense':3,
-        'person':4, 'verbform':4,
-        'mood':3, 'variant':3,
-        'degree':3, 'numform':3},
+        'pos': 14, 'case': 7,
+        'gender': 4, 'number': 3,
+        'animacy': 3, 'tense': 3,
+        'person': 4, 'verbform': 4,
+        'mood': 3, 'variant': 3,
+        'degree': 3, 'numform': 3},
       cell_type='lstm_block',
       weight_decay={
-        'lang_model':0.0002,
-        'classifiers':0.002,
-        'classifiers_with_freezed_rnn':0.0002,
-        'classifiers_with_freezed_rnn_embs':0.0002,
-        'total':0.0002
+        'lang_model': 0.0002,
+        'classifiers': 0.002,
+        'classifiers_with_freezed_rnn': 0.0002,
+        'classifiers_with_freezed_rnn_embs': 0.0002,
+        'total': 0.0002
       },
       rnn_loss_weight=1.,
       clfs_loss_weight=1.,
@@ -454,7 +460,7 @@ class SmallConfig(object):
       loss_to_view='word_target_loss_l2_reg',
       min_tf=2,
       word_to_id='vocabularies/vocabulary'
-    ):
+  ):
     self.init_scale = init_scale
     self.learning_rate = learning_rate
     self.max_grad_norm = max_grad_norm
@@ -479,7 +485,6 @@ class SmallConfig(object):
     self.min_tf = min_tf
     self.word_to_id = word_to_id
 
-
   def print(self):
     for key in self.__dict__:
       print(f"{key}: {self.__dict__[key]}", flush=True)
@@ -493,8 +498,8 @@ def run_epoch(session, model, cost_name, eval_op=None, verbose=False):
   state = session.run(model.initial_state)
 
   fetches = {
-      "cost": model.get_cost(cost_name),
-      "final_state": model.final_state,
+    "cost": model.get_cost(cost_name),
+    "final_state": model.final_state,
   }
   if eval_op is not None:
     fetches["eval_op"] = eval_op
@@ -525,6 +530,7 @@ def run_epoch(session, model, cost_name, eval_op=None, verbose=False):
 
   return np.exp(costs / iters)
 
+
 def predict(session, model, classifiers, word_to_id, file='predicted.out'):
   state = session.run(model.initial_state)
   id_to_word = {}
@@ -532,7 +538,7 @@ def predict(session, model, classifiers, word_to_id, file='predicted.out'):
   for key in word_to_id:
     if key != 'word':
       id_to_word[key] = dict([(y, x) for x, y in word_to_id[key].items()])
-  predictions = collections.defaultdict(lambda:[])
+  predictions = collections.defaultdict(lambda: [])
 
   fetches = {"final_state": model.final_state, 'preds': model._predictions, 'padding': model._last_step}
   for step in range(model.input.epoch_size):
@@ -551,26 +557,25 @@ def predict(session, model, classifiers, word_to_id, file='predicted.out'):
     preds = vals['preds']
     state = vals['final_state']
 
-    # for x in preds['case'][0]:
-    #   print(id_to_word[key][x])
-
     for clf in preds:
       predictions[clf].append(preds[clf])
 
   for clf in predictions:
     predictions[clf] = np.concatenate(predictions[clf], axis=1)
-    predictions[clf] = predictions[clf].reshape([1,-1])
+    predictions[clf] = predictions[clf].reshape([1, -1])
 
   for clf in predictions:
     print(clf)
-    for x in predictions[clf][0,:50]:
+    for x in predictions[clf][0, :50]:
       print(id_to_word[clf][x], sep=' ')
 
   return predictions
 
+
 def run_op(session, op, feed_dict):
   res = session.run(op, feed_dict=feed_dict)
   return res
+
 
 def get_config(**kwargs):
   """Get model config."""
@@ -578,17 +583,16 @@ def get_config(**kwargs):
 
 
 def main(_):
-  
   if not FLAGS.data_path:
     raise ValueError("Must set --data_path to data directory")
   gpus = [
-      x.name for x in device_lib.list_local_devices() if x.device_type == "GPU"
+    x.name for x in device_lib.list_local_devices() if x.device_type == "GPU"
   ]
   if FLAGS.num_gpus > len(gpus):
     raise ValueError(
-        "Your machine has only %d gpus "
-        "which is less than the requested --num_gpus=%d."
-        % (len(gpus), FLAGS.num_gpus))
+      "Your machine has only %d gpus "
+      "which is less than the requested --num_gpus=%d."
+      % (len(gpus), FLAGS.num_gpus))
 
   train_data = FLAGS.train_file
   valid_data = FLAGS.valid_file
@@ -599,32 +603,32 @@ def main(_):
   eval_config = get_config(train_op='total', loss_to_view='total_loss', max_max_epoch=60)
   eval_config.batch_size = 1
 
-  word_to_id = config.word_to_id #if FLAGS.prediction else None
+  word_to_id = config.word_to_id  # if FLAGS.prediction else None
   # with_tags_and_pos = False if FLAGS.prediction else True
   with_tags_and_pos = True
 
   raw_data = reader.ptb_raw_data(FLAGS.data_path,
-      word_to_id=word_to_id,
-      # word_to_id=None,
-      train=train_data,
-      dev=valid_data,
-      test=test_data,
-      additional_file=None,
-      with_tags_and_pos=with_tags_and_pos,
-      lower=True,
-      unk_with_suffix=True,
-      min_tf=config.min_tf,
-      vocab_save_path=config.word_to_id)
+                                 word_to_id=word_to_id,
+                                 # word_to_id=None,
+                                 train=train_data,
+                                 dev=valid_data,
+                                 test=test_data,
+                                 additional_file=None,
+                                 with_tags_and_pos=with_tags_and_pos,
+                                 lower=True,
+                                 unk_with_suffix=True,
+                                 min_tf=config.min_tf,
+                                 vocab_save_path=config.word_to_id)
 
   train_data, valid_data, test_data, word_to_id = raw_data
   id_to_word = collections.defaultdict(lambda: '<unk>', [(y, x) for x, y in word_to_id['word'].items()])
-  
+
   if not FLAGS.prediction:
     config.classifiers, eval_config.classifiers = {}, {}
     config.learning_rate = FLAGS.lr
     eval_config.learning_rate = FLAGS.lr
 
-    config.keep_prob = {'embedding_layer':FLAGS.keep_prob, 'rnn_layer':[FLAGS.keep_prob] * config.num_layers}
+    config.keep_prob = {'embedding_layer': FLAGS.keep_prob, 'rnn_layer': [FLAGS.keep_prob] * config.num_layers}
     vocabularies_size = []
     for key in word_to_id:
       if (key != 'word') and (key in FLAGS.classifiers_to_train):
@@ -656,10 +660,10 @@ def main(_):
 
     with tf.name_scope("Test"):
       test_input = Input(
-          config=eval_config, data=test_data, name="TestInput")
+        config=eval_config, data=test_data, name="TestInput")
       with tf.variable_scope("Model", reuse=True, initializer=initializer):
         mtest = Model(is_training=False, config=eval_config,
-                         input_=test_input, name='Test')
+                      input_=test_input, name='Test')
 
     models = {"Train": m, "Valid": mvalid, "Test": mtest}
     for name, model in models.items():
@@ -680,8 +684,6 @@ def main(_):
     config_proto = tf.ConfigProto(allow_soft_placement=soft_placement)
     with tf.train.MonitoredTrainingSession(config=config_proto, checkpoint_dir=FLAGS.save_path) as session:
       if not FLAGS.prediction:
-        # predict(session, mtest, FLAGS.classifiers_to_train, id_to_word)
-        # exit(0)
         for i in range(config.max_max_epoch):
           lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
           m.assign_lr(session, config.learning_rate * lr_decay)
@@ -700,6 +702,7 @@ def main(_):
           sv.saver.save(session, FLAGS.save_path, global_step=m._global_step)
       else:
         predict(session, mtest, FLAGS.classifiers_to_train, word_to_id)
+
 
 if __name__ == "__main__":
   tf.app.run()

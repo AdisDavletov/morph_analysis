@@ -34,18 +34,30 @@ flags.DEFINE_integer("num_gpus", 0,
                      "running one replica.")
 flags.DEFINE_bool("debug", False,
                   "Turn on/off debug mode.")
-flags.DEFINE_bool("suffix_model", False,
-                  "If true model would use suffix_model mode")
+flags.DEFINE_integer("suffix_model", -1,
+                  "If > 0 model would use suffix_model mode")
 
 flags.DEFINE_float("lr", 1.0,
                   "Learning rate")
+flags.DEFINE_float("lr_decay", 0.95,
+                  "Learning rate decay")
 flags.DEFINE_list('classifiers_to_train', ['pos','case','gender','number','animacy', 'tense','person', 'verbform','mood', 'variant','degree', 'numform'],
                   "Classifiers to train, this defines architecture of classifiers layer")
 flags.DEFINE_bool("prediction", False,
                   "Prediction mode to evaluate")
 flags.DEFINE_float("keep_prob", 0.5,
                   "keep probability")
-_epoch_pointer_ = 1
+flags.DEFINE_integer("max_max_epoch", 30,
+                  "number of total epochs")
+flags.DEFINE_integer("max_epoch", 10,
+                  "number of epochs with non decreasing lr")
+flags.DEFINE_string("log_file", 'logs.txt',
+                  "for accuracy logs")
+flags.DEFINE_string("predict_file", 'prediction.out',
+                  "where to save predicted results")
+flags.DEFINE_bool("with_embeddings", True,
+                  "wheter to concatenate embedding from current timestep to clussifiers input")
+
 FLAGS = flags.FLAGS
 
 def data_type():
@@ -82,7 +94,7 @@ class Model(object):
   def _build_model(self, config):
     with tf.variable_scope("emb_part"):
       inputs = self._add_embed_layer(
-        config.vocab_size if not FLAGS.suffix_model else config.suffix_size,
+        config.vocab_size, # if not FLAGS.suffix_model else config.suffix_size,
         config.embedding_size,
         config.keep_prob['embedding_layer'])
     with tf.variable_scope("rnn_part"):
@@ -96,7 +108,7 @@ class Model(object):
       output = tf.reshape(output, [-1, self._rnn_out_size])
 
       logits = self._add_clf_layer(output, self._rnn_out_size,
-        config.vocab_size if not FLAGS.suffix_model else config.suffix_size,
+        config.vocab_size, # if not FLAGS.suffix_model else config.suffix_size,
         layer_name='lm_layer')
 
       self._logits.update({'word_target': logits})
@@ -444,7 +456,7 @@ class SmallConfig(object):
       embedding_size=640,
       max_epoch=10,
       max_max_epoch=39,
-      keep_prob={'embedding_layer':0.6,'rnn_layer':[0.6, 0.6]},
+      keep_prob={'embedding_layer':0.5,'rnn_layer':[0.5, 0.5]},
       lr_decay=0.95,
       batch_size=20,
       vocab_size=46099,
@@ -470,7 +482,7 @@ class SmallConfig(object):
       loss_to_view='word_target_loss_l2_reg',
       min_tf=2,
       word_to_id='vocabularies/vocabulary',
-      embeddings_to_classifiers=False
+      embeddings_to_classifiers=FLAGS.with_embeddings
     ):
     self.init_scale = init_scale
     self.learning_rate = learning_rate
@@ -503,7 +515,7 @@ class SmallConfig(object):
       print(f"{key}: {self.__dict__[key]}", flush=True)
 
 
-def run_epoch(session, model, cost_name, is_training=True, eval_op=None, verbose=False, accuracy_logs='accuracy_logs_without_embs.txt'):
+def run_epoch(session, model, cost_name, is_training=True, eval_op=None, verbose=False, accuracy_logs='accuracy_logs.txt'):
   """Runs the model on the given data."""
   start_time = time.time()
   costs = 0.0
@@ -551,7 +563,7 @@ def run_epoch(session, model, cost_name, is_training=True, eval_op=None, verbose
 
   for clf in total_accuracy:
     total_accuracy[clf] /= (model.batch_size * iters)
-  with open(str(is_training) + '_' + accuracy_logs, 'a') as f:
+  with open(str(is_training) + '_' + FLAGS.log_file, 'a') as f:
     print('total classsifiers accuracy by end of epoch', file=f, flush=True)
     for clf in total_accuracy:
       print(clf, total_accuracy[clf], file=f, flush=True)
@@ -650,11 +662,13 @@ def main(_):
   test_data = FLAGS.test_file
 
   print(f'root_folder:{FLAGS.data_path}|train_file:{train_data}|valid_file:{valid_data}|test_file:{test_data}')
-  config = get_config(train_op='total', loss_to_view='total_loss', max_max_epoch=30)
-  eval_config = get_config(train_op='total', loss_to_view='total_loss', max_max_epoch=30)
+  config = get_config(train_op='total', loss_to_view='total_loss', max_max_epoch=FLAGS.max_max_epoch, learning_rate=FLAGS.lr,
+    keep_prob={'embedding_layer':FLAGS.keep_prob,'rnn_layer':[FLAGS.keep_prob, FLAGS.keep_prob]},
+    max_epoch=FLAGS.max_epoch, lr_decay=FLAGS.lr_decay)
+  eval_config = get_config(train_op='total', loss_to_view='total_loss', max_max_epoch=FLAGS.max_max_epoch)
   eval_config.batch_size = 1
 
-  word_to_id = config.word_to_id #if FLAGS.prediction else None
+  word_to_id = config.word_to_id + f"_{str(FLAGS.suffix_model)}" if FLAGS.prediction else None
   # with_tags_and_pos = False if FLAGS.prediction else True
   with_tags_and_pos = True
 
@@ -669,11 +683,12 @@ def main(_):
       lower=True,
       unk_with_suffix=True,
       min_tf=config.min_tf,
-      vocab_save_path=config.word_to_id)
+      vocab_save_path=config.word_to_id + f'_{str(FLAGS.suffix_model)}',
+      suffix=FLAGS.suffix_model)
 
   train_data, valid_data, test_data, word_to_id = raw_data
   id_to_word = collections.defaultdict(lambda: '<unk>', [(y, x) for x, y in word_to_id['word'].items()])
-  
+
   if not FLAGS.prediction:
     config.classifiers, eval_config.classifiers = {}, {}
     config.learning_rate = FLAGS.lr
@@ -755,11 +770,11 @@ def main(_):
         test_perplexity = run_epoch(session, mtest, config.loss_to_view, is_training=False)
         print("Test Perplexity: %.3f" % test_perplexity, flush=True)
 
-        if FLAGS.save_path:
-          print("Saving model to %s." % FLAGS.save_path, flush=True)
-          sv.saver.save(session, FLAGS.save_path, global_step=m._global_step)
+        # if FLAGS.save_path:
+        #   print("Saving model to %s." % FLAGS.save_path, flush=True)
+        #   sv.saver.save(session, FLAGS.save_path, global_step=m._global_step)
       else:
-        predict(session, mtest, FLAGS.classifiers_to_train, word_to_id, mtest.input.epoch_size)
+        predict(session, mtest, FLAGS.classifiers_to_train, word_to_id, mtest.input.epoch_size, out_file=FLAGS.predict_file)
 
 if __name__ == "__main__":
   tf.app.run()

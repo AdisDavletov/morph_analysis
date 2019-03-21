@@ -31,7 +31,7 @@ import tensorflow as tf
 Py3 = sys.version_info[0] == 3
 FLDS = "word|pos|case|gender|number|animacy|tense|person|verbform|mood|variant|degree|numform"
 
-def _parse_lines(lines, data_buf, lower=False, suffix=-1):
+def _parse_lines(lines, data_buf, lower=False, suffix=-1, test_data=False):
   cur_sent = defaultdict(list)
   for line in lines:
     line = line.lower().strip() if lower else line.strip()
@@ -45,8 +45,11 @@ def _parse_lines(lines, data_buf, lower=False, suffix=-1):
       word, _, pos, tags = splitted[1:]
     elif len(splitted) == 4:
       word, pos, tags = splitted[1:]
+    elif test_data:
+      word, pos, tags = splitted[1], 'verb' if lower else 'VERB', '_' # pos and tags will be predicted, so there is no difference in their values
     else:
-      raise ValueError("Each line should have 4 or 5 columns")
+      raise ValueError("Each line should have 4 or 5 or 2 (untagged data) columns")
+
     word = word[-suffix:] if suffix > 0 else word
     curr_step = {}
     curr_step['word'], curr_step['pos'] = word, pos
@@ -71,18 +74,18 @@ def _update_data_buf(data_buf, cur_sent):
     data_buf[fld] += (cur_sent[fld] + [eos])
 
 
-def _read_words(filename, with_tags_and_pos=True, lower=False, suffix=-1):
+def _read_words(filename, with_tags_and_pos=True, lower=False, suffix=-1, test_data=False):
   data = defaultdict(list)
   if with_tags_and_pos:
     with tf.gfile.GFile(filename, "r") as f:
       lines = f.readlines()
-      _parse_lines(lines, data, lower, suffix)
+      _parse_lines(lines, data, lower, suffix, test_data=test_data)
   else:
     _construct_data(filename, data, lower, suffix)
   return data
 
 def _construct_data(filename, data, lower, suffix=-1):
-  words = _read_words_2(filename, lower)
+  words = _read_words_2(filename, lower, suffix=suffix)
   data['word'] = [word[-suffix:] for word in words] if suffix > 0 else words
   for word in words:
     for fld in FLDS.split('|')[1:]:
@@ -96,8 +99,8 @@ def _read_words_2(filename, lower=False, to_replace='\n\n'):
       return f.read().replace(to_replace, " <eos> ").split()
 
 
-def _build_vocab(filename, additional_file=None, lower=False, with_tags_and_pos=True, unk_with_suffix=False, min_tf=None):
-  data = _read_words(filename, with_tags_and_pos, lower=lower)
+def _build_vocab(filename, additional_file=None, lower=False, with_tags_and_pos=True, unk_with_suffix=False, min_tf=None, suffix=-1):
+  data = _read_words(filename, with_tags_and_pos, lower=lower, suffix=suffix)
   word_to_id = {}
   letters = ['й','ц','у','к','е','н','г','ш','щ','з','х','ъ','ф','ы','в','а','п','р','о','л','д','ж','э','я','ч','с','м','и','т','ь','б','ю','ё',
     '-','1','2','3','4','5','6','7','8','9','0','.',',','>']
@@ -114,13 +117,13 @@ def _build_vocab(filename, additional_file=None, lower=False, with_tags_and_pos=
       toks += extra_words
     count_pairs = collections.Counter(toks).most_common()
     if min_tf:
-      count_pairs = [(x, y) for x, y in count_pairs if (y >= min_tf or x == '<unk>' or x.startswith('unk_'))]
+      count_pairs = [(x, y) for x, y in count_pairs if (y >= min_tf or x == '<unk>' or x.endswith('_unk'))]
     words, _ = list(zip(*count_pairs))
     word_to_id[key] = dict(zip(words, range(len(words))))
   return word_to_id
 
-def _file_to_word_ids(filename, word_to_id, with_tags_and_pos=True, lower=False, unk_with_suffix=False):
-  data = _read_words(filename, with_tags_and_pos, lower)
+def _file_to_word_ids(filename, word_to_id, with_tags_and_pos=True, lower=False, unk_with_suffix=False, suffix=-1, test_data=False):
+  data = _read_words(filename, with_tags_and_pos, lower, suffix=suffix, test_data=test_data)
   res = {}
   for key, toks in data.items():
     tokids = []
@@ -149,7 +152,8 @@ def ptb_raw_data(data_path=None,
       lower=True,
       unk_with_suffix=True,
       min_tf=None,
-      vocab_save_path=''):
+      vocab_save_path='',
+      suffix=-1):
 
   """Load PTB raw data from data directory "data_path".
   Reads PTB text files, converts strings to integer ids,
@@ -168,7 +172,7 @@ def ptb_raw_data(data_path=None,
   valid_path = os.path.join(data_path, dev)
   test_path = os.path.join(data_path, test)
   if word_to_id is None:
-    word_to_id = _build_vocab(train_path, additional_file, lower, with_tags_and_pos, unk_with_suffix, min_tf)
+    word_to_id = _build_vocab(train_path, additional_file, lower, with_tags_and_pos, unk_with_suffix, min_tf, suffix=suffix)
     if vocab_save_path:
       with open(vocab_save_path, 'wb') as f:
         pickle.dump(word_to_id, f, -1)
@@ -177,9 +181,9 @@ def ptb_raw_data(data_path=None,
     with open(word_to_id, 'rb') as f:
       word_to_id = pickle.load(f)
       # word_to_id = eval(f.read())
-  train_data = _file_to_word_ids(train_path, word_to_id, with_tags_and_pos, lower, unk_with_suffix)
-  valid_data = _file_to_word_ids(valid_path, word_to_id, with_tags_and_pos, lower, unk_with_suffix)
-  test_data = _file_to_word_ids(test_path, word_to_id, with_tags_and_pos, lower, unk_with_suffix)
+  train_data = _file_to_word_ids(train_path, word_to_id, with_tags_and_pos, lower, unk_with_suffix, suffix=suffix)
+  valid_data = _file_to_word_ids(valid_path, word_to_id, with_tags_and_pos, lower, unk_with_suffix, suffix=suffix)
+  test_data = _file_to_word_ids(test_path, word_to_id, with_tags_and_pos, lower, unk_with_suffix, suffix=suffix, test_data=True)
   
   return train_data, valid_data, test_data, word_to_id
 

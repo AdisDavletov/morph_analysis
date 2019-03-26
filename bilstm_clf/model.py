@@ -1,10 +1,14 @@
+import argparse
 import json
+from datetime import datetime
 
 import numpy as np
 import tensorflow as tf
 from sklearn.utils import shuffle
 from tensorflow.keras.layers import Bidirectional, LSTM
 from tqdm import tqdm_notebook
+
+from datasets.reader import GikryaReader
 
 
 class BiLSTMClassifier:
@@ -23,14 +27,19 @@ class BiLSTMClassifier:
         self.saver = tf.train.Saver(self.variables_to_save)
 
     @staticmethod
-    def create_config(config_path, config):
-        with open(config_path, 'w') as f:
+    def create_config(save_path, config):
+        with open(save_path, 'wb') as f:
             json.dump(config, f)
         return config
 
+    @staticmethod
+    def load_config(save_path):
+        with open(save_path, 'rb') as f:
+            res = json.load(f)
+        return res
+
     def build_model(self):
-        with open(self.config_path, 'r') as f:
-            config = json.load(f)
+        config = self.load_config(self.config_path)
         max_seq_len = config['max_seq_len']
         hidden_size = config['hidden_size']
         voc_size = config['voc_size']
@@ -95,7 +104,7 @@ class BiLSTMClassifier:
         self.train = self.optimizer.minimize(self.loss, global_step=self.global_step, name='train')
 
     def fit(self, inputs, targets, batch_size=30, epochs=5, from_chkp=None, dropout=0.2, with_lr=False,
-            save_per_step=998, validation_split=0.2, validation_step=100, foo_save=None):
+            save_per_step=998, validation_split=0.2, validation_step=100, foo_save=None, validation_data=None):
         validation_accuracy, i = 0., 0
         validation_loss = 0.
 
@@ -104,8 +113,13 @@ class BiLSTMClassifier:
 
         border = int(len(X) * validation_split)
 
-        X_tr, X_vl = X[border:], X[:border]
-        y_tr, y_vl = y[border:], y[:border]
+        if validation_data is not None:
+            X_tr, y_tr = X, y
+            X_vl, y_vl = validation_data[0], validation_data[1]
+        else:
+            X_tr, X_vl = X[border:], X[:border]
+            y_tr, y_vl = y[border:], y[:border]
+
         total = (0 if len(X_tr) % batch_size == 0 else 1) + (len(X_tr) // batch_size)
 
         validation_inf = {'loss': {}, 'accuracy': {}}
@@ -214,6 +228,7 @@ class BiLSTMClassifier:
                     print(id, token, '_', pos, gram_cats, sep='\t', file=f)
                 print(file=f)
 
+
 def batch_generator(X, y=None, bs=30, to_shuffle=False):
     extra_ep = 0 if len(X) % bs == 0 else 1
     ep_size = (len(X) // bs) + extra_ep
@@ -231,3 +246,69 @@ def batch_generator(X, y=None, bs=30, to_shuffle=False):
         else:
             yield A[i * bs: (i + 1) * bs]
 
+
+if __name__ == '__main__':
+    p = argparse.ArgumentParser()
+    p.add_argument('--max_seq_len', type=int, default=60)
+    p.add_argument('--bs', type=int, default=50)
+    p.add_argument('--optimizer', type=str, default='adam')
+    p.add_argument('--hidden_size', type=int, default=150)
+    p.add_argument('--emb_size', type=int, default=300)
+    p.add_argument('--lr', type=float, default=0.001)
+    p.add_argument('--num_layers', type=int, default=2)
+    p.add_argument('--dropout', type=float, default=0.2)
+    p.add_argument('--config_path', type=float, default='build_config.json')
+    p.add_argument('--train_file', type=str, default='../datasets/gikrya_new_train.out')
+    p.add_argument('--test_file', type=str, default='../datasets/gikrya_new_test.out')
+    p.add_argument('--train_log', type=str, default='.logs')
+    p.add_argument('--max_epochs', type=int, default=20)
+    args = p.parse_args()
+
+    max_seq_len = args.max_seq_len
+    batch_size = args.bs
+    optimizer = args.optimizer
+    hidden_size = args.hidden_size
+    emb_size = args.emb_size
+    lr = args.lr
+    num_layers = args.num_layers
+    dropout = args.dropout
+    config_path = args.config_path
+    max_epochs = args.max_epochs
+    log = args.train_log + f"-{str(datetime.now()).replace(':', '-').replace(' ', '-')}.txt"
+    print(f'logging loss and accuracy to {log}')
+
+    reader = GikryaReader(args.train_file, pad_to=max_seq_len, min_tf=2)
+
+    num_classes = reader.num_classes
+    voc_size = len(reader.vocabulary) + 1
+
+    config = {
+        'batch_size': batch_size,
+        'hidden_size': hidden_size,
+        'learning_rate': lr,
+        'max_seq_len': max_seq_len,
+        'num_classes': num_classes,
+        'num_layers': num_layers,
+        'optimizer': optimizer,
+        'voc_size': voc_size,
+        'dropout': dropout
+    }
+
+    X_train = GikryaReader.encode_sentences(reader.df, reader.vocabulary)
+    y_train = GikryaReader.encode_categories_jointly(reader.df, reader.pos_gram_cats_vocabulary)
+    X_train = np.array(X_train)
+    y_train = np.array(y_train)
+
+    test_df = GikryaReader.load_df(args.test_file, shuffle=False)
+    X_test = GikryaReader.encode_sentences(test_df, reader.vocabulary)
+    y_test = GikryaReader.encode_categories_jointly(test_df, reader.pos_gram_cats_vocabulary)
+    X_test = np.array(X_test)
+    y_test = np.array(y_test)
+
+    BiLSTMClassifier.create_config(config_path, config)
+    clf = BiLSTMClassifier(config_path)
+    inf = clf.fit(X_train, y_train, batch_size=batch_size, epochs=max_epochs, dropout=dropout, save_per_step=2000,
+                  validation_step=200, validation_data=(X_test, y_test))
+
+    with open(log, 'wb') as f:
+        json.dump(inf, f)

@@ -259,7 +259,7 @@ if __name__ == '__main__':
     p.add_argument('--lr', type=float, default=0.001)
     p.add_argument('--num_layers', type=int, default=2)
     p.add_argument('--dropout', type=float, default=0.2)
-    p.add_argument('--config_path', type=float, default='build_config.json')
+    p.add_argument('--config_path', type=str, default='build_config.json')
     p.add_argument('--train_file', type=str, default='../datasets/gikrya_new_train.out')
     p.add_argument('--test_file', type=str, default='../datasets/gikrya_new_test.out')
     p.add_argument('--train_log', type=str, default='.logs')

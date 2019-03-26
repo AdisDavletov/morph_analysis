@@ -195,10 +195,24 @@ class BiLSTMClassifier:
         accuracy /= i
         return {'loss': loss, 'accuracy': accuracy * 100}
 
-
-def contiguous_batch_generator():
-    pass
-
+    @staticmethod
+    def save_predictions(filename, predictions, df, vocabulary):
+        voc = dict([(int(idx), cat) for cat, idx in vocabulary.items()])
+        with open(filename, 'w') as f:
+            for i in range(len(df)):
+                tokens = df.iloc[i].tokens
+                IDs = df.iloc[i].IDs
+                predicts = predictions[i]
+                for token, predict, id in zip(tokens[1:], predicts, IDs):
+                    if token == '_pad_': break
+                    if predict not in voc:
+                        cat = '_unk_#_unk_'
+                    else:
+                        cat = voc[predict]
+                    pos = cat.split('#')[0]
+                    gram_cats = cat.split('#')[1]
+                    print(id, token, '_', pos, gram_cats, sep='\t', file=f)
+                print(file=f)
 
 def batch_generator(X, y=None, bs=30, to_shuffle=False):
     extra_ep = 0 if len(X) % bs == 0 else 1
@@ -217,21 +231,3 @@ def batch_generator(X, y=None, bs=30, to_shuffle=False):
         else:
             yield A[i * bs: (i + 1) * bs]
 
-
-def save_predictions(filename, predictions, df, vocabulary):
-    voc = dict([(int(idx), cat) for cat, idx in vocabulary.items()])
-    with open(filename, 'w') as f:
-        for i in range(len(df)):
-            tokens = df.iloc[i].tokens
-            IDs = df.iloc[i].IDs
-            predicts = predictions[i]
-            for token, predict, id in zip(tokens[1:], predicts, IDs):
-                if token == '_pad_': break
-                if predict not in voc:
-                    cat = '_unk_#_unk_'
-                else:
-                    cat = voc[predict]
-                pos = cat.split('#')[0]
-                gram_cats = cat.split('#')[1]
-                print(id, token, '_', pos, gram_cats, sep='\t', file=f)
-            print(file=f)

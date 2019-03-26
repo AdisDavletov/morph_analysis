@@ -128,7 +128,7 @@ class BiLSTMClassifier:
         train_inf = {'loss': {}, 'accuracy': {}}
 
         with tf.Session() as sess:
-            try:
+            # try:
                 sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
                 if from_chkp is not None:
                     self.saver.restore(sess, self.chkp_dir + f'/{from_chkp}')
@@ -177,9 +177,9 @@ class BiLSTMClassifier:
                             foo_save()
                 self.saver.save(sess, self.chkp_dir + '/my_model',
                                 global_step=step)
-            except:
-                print(f'saving checkpoint to {self.chkp_dir + "/my_model_interrupted"}')
-                self.saver.save(sess, self.chkp_dir + '/my_model_interrupted')
+            # except:
+            #     print(f'saving checkpoint to {self.chkp_dir + "/my_model_interrupted"}')
+            #     self.saver.save(sess, self.chkp_dir + '/my_model_interrupted')
 
         return train_inf, validation_inf
 

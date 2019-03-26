@@ -30,13 +30,13 @@ class BiLSTMClassifier:
 
     @staticmethod
     def create_config(save_path, config):
-        with open(save_path, 'wb') as f:
+        with open(save_path, 'w') as f:
             json.dump(config, f)
         return config
 
     @staticmethod
     def load_config(save_path):
-        with open(save_path, 'rb') as f:
+        with open(save_path, 'r') as f:
             res = json.load(f)
         return res
 

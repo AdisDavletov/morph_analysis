@@ -58,9 +58,10 @@ class GikryaReader:
     @staticmethod
     def encode_categories_jointly(df, vocabulary):
         output = []
+        undefined = vocabulary.get('_pad_#_pad_')
         for POSs, gram_cats in zip(df.POSs, df.gram_cats):
             sentence = ['#'.join([pos, cat]) for pos, cat in zip(POSs, gram_cats)]
-            output.append([vocabulary[pos_gram_cat] for pos_gram_cat in sentence])
+            output.append([vocabulary[pos_gram_cat] if pos_gram_cat in vocabulary else undefined for pos_gram_cat in sentence])
         return output
 
     @staticmethod

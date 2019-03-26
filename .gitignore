@@ -3,3 +3,5 @@
 _tmp_/
 __pycache__/
 .ipynb_checkpoints/
+chkps/
+logs/

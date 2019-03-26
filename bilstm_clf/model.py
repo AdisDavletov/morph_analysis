@@ -8,6 +8,8 @@ from sklearn.utils import shuffle
 from tensorflow.keras.layers import Bidirectional, LSTM
 from tqdm import tqdm_notebook
 
+import sys
+sys.path.append('../')
 from datasets.reader import GikryaReader
 
 

@@ -312,5 +312,5 @@ if __name__ == '__main__':
     inf = clf.fit(X_train, y_train, batch_size=batch_size, epochs=max_epochs, dropout=dropout, save_per_step=2000,
                   validation_step=200, validation_data=(X_test, y_test))
 
-    with open(log, 'wb') as f:
+    with open(log, 'w') as f:
         json.dump(inf, f)

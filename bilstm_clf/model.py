@@ -17,10 +17,10 @@ class BiLSTMClassifier:
         self.global_step = tf.train.get_or_create_global_step()
         self.build_model()
         self.extra_vars_to_save = [(self.global_step.op.name, self.global_step), (self.lr.op.name, self.lr)]
-        self.trainable_variables = dict(
+        self.variables_to_save = dict(
             self.extra_vars_to_save + [(x.op.name, x) for x in
                                        tf.trainable_variables()])
-        self.saver = tf.train.Saver(self.trainable_variables)
+        self.saver = tf.train.Saver(self.variables_to_save)
 
     @staticmethod
     def create_config(config_path, config):
@@ -76,8 +76,9 @@ class BiLSTMClassifier:
                                                      targets=self.targets,
                                                      weights=self.weights,
                                                      average_across_timesteps=True,
-                                                     average_across_batch=True,
+                                                     average_across_batch=False,
                                                      name='loss')
+        self.loss_averaged = tf.reduce_mean(self.loss)
 
         self.accuracy = tf.metrics.accuracy(self.targets, self.predictions, weights=self.weights, name='accuracy')
         if config['optimizer'].lower() == 'adam':
@@ -93,64 +94,84 @@ class BiLSTMClassifier:
 
         self.train = self.optimizer.minimize(self.loss, global_step=self.global_step, name='train')
 
-    def fit(self, inputs, targets, batch_size=30, epochs=5, from_chkp=None, dropout=0.2, with_lr=False, save_per_epoch=10, validation_split=0.2, validation_step=100):
-        ep_acc, acc, i = 0., 0., 0
-        extra_batch = 0 if len(X) % batch_size == 0 else 1
-        n_batchs = len(X) // batch_size
+    def fit(self, inputs, targets, batch_size=30, epochs=5, from_chkp=None, dropout=0.2, with_lr=False,
+            save_per_step=998, validation_split=0.2, validation_step=100, foo_save=None):
+        validation_accuracy, i = 0., 0
+        validation_loss = 0.
+
         X = np.copy(inputs)
         y = np.copy(targets)
+
         border = int(len(X) * validation_split)
+
         X_tr, X_vl = X[border:], X[:border]
         y_tr, y_vl = y[border:], y[:border]
-        validation_losses = {}
+        total = (0 if len(X_tr) % batch_size == 0 else 1) + (len(X_tr) // batch_size)
+
+        validation_inf = {'loss': {}, 'accuracy': {}}
+        train_inf = {'loss': {}, 'accuracy': {}}
+
         with tf.Session() as sess:
-            # try:
-            sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
-            if from_chkp is not None:
-                self.saver.restore(sess, self.chkp_dir.rstrip('/') + f'/{from_chkp}')
-            for epoch in range(epochs):
-                accuracies = []
-                progress_bar = tqdm_notebook(batch_generator(X_tr, y_tr, batch_size, to_shuffle=True),
-                                             total=n_batchs + extra_batch)
-                for x, y_ in progress_bar:
-                    weights = np.zeros_like(x)
-                    weights[np.where(x != 0)] = 1.0
-                    fetches = {'train': self.train, 'accuracy': self.accuracy, 'step': self.global_step,
-                               'loss': self.loss}
-                    feed_dict = {self.targets: y_, self.inputs: x, self.weights: weights,
-                                 self.dropout: dropout}
-                    if with_lr:
-                        feed_dict.update({self.lr: with_lr})
+            try:
+                sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
+                if from_chkp is not None:
+                    self.saver.restore(sess, self.chkp_dir + f'/{from_chkp}')
+                step = 0
+                for epoch in range(epochs):
+                    progress_bar = tqdm_notebook(batch_generator(X_tr, y_tr, batch_size, to_shuffle=True),
+                                                 total=total)
+                    for x, y_ in progress_bar:
 
-                    fetched = sess.run(fetches=fetches,
-                                       feed_dict=feed_dict)
-                    accuracies.append(fetched['accuracy'][1] * 100)
-                    acc = fetched['accuracy'][1] * 100
-                    loss = fetched['loss']
-                    progress_bar.set_postfix_str(
-                        f'ep: {epoch + 1}/{epochs}, loss: {"%.4f" % loss}, acc: {"%.3f" % acc}, ep_acc: {"%.3f" % ep_acc}')
-                    if fetched['step'] % validation_step + 1 == validation_step:
-                        validation_losses[fetched['step']] = validate(X_vl, y_vl, sess)
-                    # if fetched['step'] % self.save_per_step == 0:
-                    #     self.saver.save(sess, self.chkp_dir.rstrip('/') + '/' + 'my_model',
-                    #                     global_step=fetched['step'])
+                        weights = np.zeros_like(x)
+                        weights[np.where(x != self.pad_idx)] = 1.0
 
-                ep_acc = sum(accuracies) / (n_batchs + extra_batch)
-                if epoch % save_per_epoch + 1 == save_per_epoch:
-                    self.saver.save(sess, self.chkp_dir.rstrip('/') + '/' + 'my_model',
-                                    global_step=fetched['step'])
-                    !cp my_model* '/content/drive/My Drive/DEEP LEARNING/JUPYTER/'
-                    !cp checkpoint '/content/drive/My Drive/DEEP LEARNING/JUPYTER/'
-        # except:
-        #     print(f'saving checkpoint to {self.chkp_dir + "/my_model"}')
-        #     self.saver.save(sess, self.chkp_dir.rstrip('/') + '/' + 'my_model')
-        return self
+                        fetches = {'train': self.train, 'accuracy': self.accuracy, 'step': self.global_step,
+                                   'loss': self.loss_averaged}
+                        feed_dict = {self.targets: y_, self.inputs: x, self.weights: weights,
+                                     self.dropout: dropout}
+
+                        if with_lr:
+                            feed_dict.update({self.lr: with_lr})
+
+                        fetched = sess.run(fetches=fetches, feed_dict=feed_dict)
+
+                        step = fetched['step']
+                        accuracy = fetched['accuracy'][1] * 100
+                        loss = fetched['loss']
+
+                        train_inf['loss'][step] = loss
+                        train_inf['accuracy'][step] = accuracy
+
+                        if step % validation_step + 1 == validation_step:
+                            val_inf = self.validate(X_vl, y_vl, sess)
+                            validation_inf['loss'][step] = val_inf['loss']
+                            validation_inf['accuracy'][step] = val_inf['accuracy']
+                            validation_accuracy = val_inf['accuracy']
+                            validation_loss = val_inf['loss']
+
+                        progress_bar.set_postfix_str(
+                            f'ep: {epoch + 1}/{epochs},'
+                            f'loss: {"%.4f" % loss}, acc: {"%.3f" % accuracy},'
+                            f'val_loss: {"%.4f" % validation_loss}, val_acc: {"%.3f" % validation_accuracy}')
+
+                    if step % save_per_step + 1 == save_per_step:
+                        self.saver.save(sess, self.chkp_dir + '/my_model',
+                                        global_step=step)
+                        if foo_save is not None:
+                            foo_save()
+                self.saver.save(sess, self.chkp_dir + '/my_model',
+                                global_step=step)
+            except:
+                print(f'saving checkpoint to {self.chkp_dir + "/my_model_interrupted"}')
+                self.saver.save(sess, self.chkp_dir + '/my_model_interrupted')
+
+        return train_inf, validation_inf
 
     def predict(self, X, batch_size, from_chkp):
         predictions = []
         with tf.Session() as sess:
             sess.run([tf.global_variables_initializer()])
-            self.saver.restore(sess, self.chkp_dir.rstrip('/') + '/' + f'{from_chkp}')
+            self.saver.restore(sess, self.chkp_dir + f'/{from_chkp}')
             for x in batch_generator(X, bs=batch_size):
                 batch_predictions = sess.run(fetches={'predictions': self.predictions},
                                              feed_dict={self.inputs: x, self.dropout: 0.0})
@@ -159,9 +180,21 @@ class BiLSTMClassifier:
 
     def validate(self, X, y, sess):
         fetches = {'loss': self.loss, 'accuracy': self.accuracy}
+        loss, accuracy, i = 0.0, 0.0, 0
         for x, y_ in batch_generator(X, y, 100):
-            feed_dict = {self.inputs: x, self.targets: y_}
-            sess.run(fetches, feed_dict=)
+            i += 1
+            weights = np.zeros_like(x)
+            weights[np.where(x != self.pad_idx)] = 1.0
+
+            feed_dict = {self.inputs: x, self.targets: y_, self.dropout: 0.0,
+                         self.weights: weights}
+            fetched = sess.run(fetches, feed_dict=feed_dict)
+            loss += sum(fetched['loss'])
+            accuracy += fetched['accuracy'][1]
+        loss /= len(X)
+        accuracy /= i
+        return {'loss': loss, 'accuracy': accuracy * 100}
+
 
 def contiguous_batch_generator():
     pass
@@ -170,6 +203,7 @@ def contiguous_batch_generator():
 def batch_generator(X, y=None, bs=30, to_shuffle=False):
     extra_ep = 0 if len(X) % bs == 0 else 1
     ep_size = (len(X) // bs) + extra_ep
+
     A = np.copy(X)
     b = None
     if y is not None: b = np.copy(y)

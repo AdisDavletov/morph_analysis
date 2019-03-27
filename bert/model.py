@@ -1,6 +1,7 @@
 BERT_MODEL_HUB = 'https://tfhub.dev/google/bert_multi_cased_L-12_H-768_A-12/1'
 DATA_DIR = '/content/drive/My Drive/DEEP LEARNING/datasets/POS_TAGGING/gikrya/'
 
+import torch
 import bert
 import tensorflow as tf
 import tensorflow_hub as hub

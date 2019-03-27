@@ -1,27 +1,25 @@
 import argparse
 import json
 import pickle
-import sys
 from datetime import datetime
 
 import numpy as np
 import tensorflow as tf
+from reader import GikryaReader
 from sklearn.utils import shuffle
 from tensorflow.keras.layers import Bidirectional, LSTM
 from tqdm import tqdm_notebook, tqdm
-
-sys.path.append('../')
-from datasets.reader import GikryaReader
 
 from_notebook = True
 
 
 class BiLSTMClassifier:
-    def __init__(self, config_path='build_config.json', is_training=True, pad_idx=0, chkp_dir='.'):
+    def __init__(self, config_path='build_config.json', is_training=True, pad_idx=0, chkp_dir='.', merge_mode='ave'):
         self.config_path = config_path
         self.is_training = is_training
         self.pad_idx = pad_idx
         self.chkp_dir = chkp_dir
+        self.merge_mode = merge_mode
         tf.reset_default_graph()
         self.global_step = tf.train.get_or_create_global_step()
         self.build_model()
@@ -69,7 +67,7 @@ class BiLSTMClassifier:
 
         for i in range(num_layers):
             if i == 0:
-                model = Bidirectional(LSTM(hidden_size, return_sequences=True), merge_mode='ave',
+                model = Bidirectional(LSTM(hidden_size, return_sequences=True), merge_mode=self.merge_mode,
                                       input_shape=(max_seq_len, hidden_size))(inputs)
             else:
                 if self.is_training:

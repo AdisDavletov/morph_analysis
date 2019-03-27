@@ -12,7 +12,9 @@ from tqdm import tqdm_notebook, tqdm
 
 sys.path.append('../')
 from datasets.reader import GikryaReader
+
 from_notebook = True
+
 
 class BiLSTMClassifier:
     def __init__(self, config_path='build_config.json', is_training=True, pad_idx=0, chkp_dir='.'):
@@ -67,14 +69,13 @@ class BiLSTMClassifier:
 
         for i in range(num_layers):
             if i == 0:
-                model = Bidirectional(LSTM(hidden_size, return_sequences=True), input_shape=(max_seq_len, hidden_size))(
-                    inputs)
+                model = Bidirectional(LSTM(hidden_size, return_sequences=True), merge_mode='ave',
+                                      input_shape=(max_seq_len, hidden_size))(inputs)
             else:
                 if self.is_training:
                     model = tf.nn.dropout(model, keep_prob=self.keep_prob)
                 model = Bidirectional(LSTM(hidden_size, return_sequences=True),
-                                      input_shape=(max_seq_len, 2 * hidden_size))(
-                    model)
+                                      input_shape=(max_seq_len, 2 * hidden_size))(model)
         self.dense = tf.get_variable('dense', [2 * hidden_size, num_classes], dtype=tf.float32)
 
         model = tf.reshape(model, [-1, 2 * hidden_size])
@@ -130,58 +131,58 @@ class BiLSTMClassifier:
 
         with tf.Session() as sess:
             # try:
-                sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
-                if from_chkp is not None:
-                    self.saver.restore(sess, self.chkp_dir + f'/{from_chkp}')
-                step = 0
-                for epoch in range(epochs):
-                    if from_notebook:
-                        progress_bar = tqdm_notebook(batch_generator(X_tr, y_tr, batch_size, to_shuffle=True),
-                                                     total=total)
-                    else:
-                        progress_bar = tqdm(batch_generator(X_tr, y_tr, batch_size, to_shuffle=True),
-                                            total=total)
-                    for x, y_ in progress_bar:
+            sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
+            if from_chkp is not None:
+                self.saver.restore(sess, self.chkp_dir + f'/{from_chkp}')
+            step = 0
+            for epoch in range(epochs):
+                if from_notebook:
+                    progress_bar = tqdm_notebook(batch_generator(X_tr, y_tr, batch_size, to_shuffle=True),
+                                                 total=total)
+                else:
+                    progress_bar = tqdm(batch_generator(X_tr, y_tr, batch_size, to_shuffle=True),
+                                        total=total)
+                for x, y_ in progress_bar:
 
-                        weights = np.zeros_like(x)
-                        weights[np.where(x != self.pad_idx)] = 1.0
+                    weights = np.zeros_like(x)
+                    weights[np.where(x != self.pad_idx)] = 1.0
 
-                        fetches = {'train': self.train, 'accuracy': self.accuracy, 'step': self.global_step,
-                                   'loss': self.loss_averaged}
-                        feed_dict = {self.targets: y_, self.inputs: x, self.weights: weights,
-                                     self.dropout: dropout}
+                    fetches = {'train': self.train, 'accuracy': self.accuracy, 'step': self.global_step,
+                               'loss': self.loss_averaged}
+                    feed_dict = {self.targets: y_, self.inputs: x, self.weights: weights,
+                                 self.dropout: dropout}
 
-                        if with_lr:
-                            feed_dict.update({self.lr: with_lr})
+                    if with_lr:
+                        feed_dict.update({self.lr: with_lr})
 
-                        fetched = sess.run(fetches=fetches, feed_dict=feed_dict)
+                    fetched = sess.run(fetches=fetches, feed_dict=feed_dict)
 
-                        step = fetched['step']
-                        accuracy = fetched['accuracy'][1] * 100
-                        loss = fetched['loss']
+                    step = fetched['step']
+                    accuracy = fetched['accuracy'][1] * 100
+                    loss = fetched['loss']
 
-                        train_inf['loss'][step] = loss
-                        train_inf['accuracy'][step] = accuracy
+                    train_inf['loss'][step] = loss
+                    train_inf['accuracy'][step] = accuracy
 
-                        if step % validation_step + 1 == validation_step:
-                            val_inf = self.validate(X_vl, y_vl, sess)
-                            validation_inf['loss'][step] = val_inf['loss']
-                            validation_inf['accuracy'][step] = val_inf['accuracy']
-                            validation_accuracy = val_inf['accuracy']
-                            validation_loss = val_inf['loss']
+                    if step % validation_step + 1 == validation_step:
+                        val_inf = self.validate(X_vl, y_vl, sess)
+                        validation_inf['loss'][step] = val_inf['loss']
+                        validation_inf['accuracy'][step] = val_inf['accuracy']
+                        validation_accuracy = val_inf['accuracy']
+                        validation_loss = val_inf['loss']
 
-                        progress_bar.set_postfix_str(
-                            f'ep: {epoch + 1}/{epochs},'
-                            f'loss: {"%.4f" % loss}, acc: {"%.3f" % accuracy},'
-                            f'val_loss: {"%.4f" % validation_loss}, val_acc: {"%.3f" % validation_accuracy}')
+                    progress_bar.set_postfix_str(
+                        f'ep: {epoch + 1}/{epochs},'
+                        f'loss: {"%.4f" % loss}, acc: {"%.3f" % accuracy},'
+                        f'val_loss: {"%.4f" % validation_loss}, val_acc: {"%.3f" % validation_accuracy}')
 
-                    if step % save_per_step + 1 == save_per_step:
-                        self.saver.save(sess, self.chkp_dir + '/my_model',
-                                        global_step=step)
-                        if foo_save is not None:
-                            foo_save()
-                self.saver.save(sess, self.chkp_dir + '/my_model',
-                                global_step=step)
+                if step % save_per_step + 1 == save_per_step:
+                    self.saver.save(sess, self.chkp_dir + '/my_model',
+                                    global_step=step)
+                    if foo_save is not None:
+                        foo_save()
+            self.saver.save(sess, self.chkp_dir + '/my_model',
+                            global_step=step)
         # except:
         #     print(f'saving checkpoint to {self.chkp_dir + "/my_model_interrupted"}')
         #     self.saver.save(sess, self.chkp_dir + '/my_model_interrupted')

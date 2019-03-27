@@ -57,13 +57,15 @@ class BiLSTMClassifier:
         self.weights = tf.placeholder(tf.float32, shape=[None, max_seq_len], name='weights')
 
         self.lr = tf.get_variable(initializer=lr, trainable=False, name='learning_rate')
-
+        tf.summary.scalar('lr', self.lr)
         with tf.device("/cpu:0"):
             embeddings = tf.get_variable(
                 "embeddings", [voc_size, hidden_size], dtype=tf.float32)
             inputs = tf.nn.embedding_lookup(embeddings, self.inputs)
             if self.is_training:
                 inputs = tf.nn.dropout(inputs, keep_prob=self.keep_prob)
+
+        intermediate_size = 2 * hidden_size if self.merge_mode == 'concat' else hidden_size
 
         for i in range(num_layers):
             if i == 0:
@@ -73,10 +75,10 @@ class BiLSTMClassifier:
                 if self.is_training:
                     model = tf.nn.dropout(model, keep_prob=self.keep_prob)
                 model = Bidirectional(LSTM(hidden_size, return_sequences=True),
-                                      input_shape=(max_seq_len, 2 * hidden_size))(model)
-        self.dense = tf.get_variable('dense', [2 * hidden_size, num_classes], dtype=tf.float32)
+                                      input_shape=(max_seq_len, intermediate_size))(model)
+        self.dense = tf.get_variable('dense', [intermediate_size, num_classes], dtype=tf.float32)
 
-        model = tf.reshape(model, [-1, 2 * hidden_size])
+        model = tf.reshape(model, [-1, intermediate_size])
         self.model = tf.reshape(tf.matmul(model, self.dense), [-1, max_seq_len, num_classes])
         self.predictions = tf.argmax(self.model, axis=-1)
 
@@ -91,7 +93,11 @@ class BiLSTMClassifier:
                                                      name='loss')
         self.loss_averaged = tf.reduce_mean(self.loss)
 
+        tf.summary.scalar('batch_loss', self.loss_averaged)
+
         self.accuracy = tf.metrics.accuracy(self.targets, self.predictions, weights=self.weights, name='accuracy')
+        tf.summary.scalar('accuracy', self.accuracy)
+
         if config['optimizer'].lower() == 'adam':
             self.optimizer = tf.train.AdamOptimizer(self.lr)
         elif config['optimizer'].lower() == 'sgd':
@@ -104,6 +110,8 @@ class BiLSTMClassifier:
             raise ValueError()
 
         self.train = self.optimizer.minimize(self.loss, global_step=self.global_step, name='train')
+
+        self.summaries = tf.summary.merge_all()
 
     def fit(self, inputs, targets, batch_size=30, epochs=5, from_chkp=None, dropout=0.2, with_lr=False,
             save_per_step=998, validation_split=0.2, validation_step=100, foo_save=None, validation_data=None):
@@ -132,6 +140,10 @@ class BiLSTMClassifier:
             sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
             if from_chkp is not None:
                 self.saver.restore(sess, self.chkp_dir + f'/{from_chkp}')
+
+            swt = tf.summary.FileWriter(self.chkp_dir + '/train', sess.graph)
+            swd = tf.summary.FileWriter(self.chkp_dir + '/dev', sess.graph)
+
             step = 0
             for epoch in range(epochs):
                 if from_notebook:
@@ -146,7 +158,7 @@ class BiLSTMClassifier:
                     weights[np.where(x != self.pad_idx)] = 1.0
 
                     fetches = {'train': self.train, 'accuracy': self.accuracy, 'step': self.global_step,
-                               'loss': self.loss_averaged}
+                               'loss': self.loss_averaged, 'summaries': self.summaries}
                     feed_dict = {self.targets: y_, self.inputs: x, self.weights: weights,
                                  self.dropout: dropout}
 
@@ -158,6 +170,8 @@ class BiLSTMClassifier:
                     step = fetched['step']
                     accuracy = fetched['accuracy'][1] * 100
                     loss = fetched['loss']
+                    summaries = fetched['summaries']
+                    swt.add_summary(summaries, step)
 
                     train_inf['loss'][step] = loss
                     train_inf['accuracy'][step] = accuracy
@@ -168,6 +182,14 @@ class BiLSTMClassifier:
                         validation_inf['accuracy'][step] = val_inf['accuracy']
                         validation_accuracy = val_inf['accuracy']
                         validation_loss = val_inf['loss']
+                        summary = tf.Summary(value=[
+                            tf.Summary.Value(tag="val_loss", simple_value=validation_loss),
+                        ])
+                        swd.add_summary(summary)
+                        summary = tf.Summary(value=[
+                            tf.Summary.Value(tag="val_accuracy", simple_value=validation_accuracy),
+                        ])
+                        swd.add_summary(summary, step)
 
                     progress_bar.set_postfix_str(
                         f'ep: {epoch + 1}/{epochs},'

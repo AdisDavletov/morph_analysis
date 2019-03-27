@@ -6,7 +6,7 @@ import pandas as pd
 class GikryaReader:
     def __init__(self, filename, stop_words=None, sep='\t', lowercase=True,
                  joint_categories=True, n_ending_chars=None, pad_to=90,
-                 shuffle=True, part='train', add_start_token=True, min_tf=10):
+                 shuffle=True, part='train', add_start_token=False, min_tf=10):
 
         self.joint_categories = joint_categories
         self.stop_words = [] if stop_words is None else stop_words

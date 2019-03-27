@@ -280,7 +280,7 @@ if __name__ == '__main__':
     print(f'logging loss and accuracy to {log}')
 
     reader = GikryaReader(args.train_file, pad_to=max_seq_len, min_tf=2)
-
+    t_reader = GikryaReader(args.test_file, pad_to=max_seq_len, shuffle=False)
     num_classes = reader.num_classes
     voc_size = len(reader.vocabulary) + 1
 
@@ -301,9 +301,8 @@ if __name__ == '__main__':
     X_train = np.array(X_train)
     y_train = np.array(y_train)
 
-    test_df = GikryaReader.load_df(args.test_file, shuffle=False)
-    X_test = GikryaReader.encode_sentences(test_df, reader.vocabulary)
-    y_test = GikryaReader.encode_categories_jointly(test_df, reader.pos_gram_cats_vocabulary)
+    X_test = GikryaReader.encode_sentences(t_reader.df, reader.vocabulary)
+    y_test = GikryaReader.encode_categories_jointly(t_reader.df, reader.pos_gram_cats_vocabulary)
     X_test = np.array(X_test)
     y_test = np.array(y_test)
 

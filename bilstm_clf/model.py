@@ -1,17 +1,18 @@
 import argparse
 import json
+import pickle
+import sys
 from datetime import datetime
 
 import numpy as np
 import tensorflow as tf
 from sklearn.utils import shuffle
 from tensorflow.keras.layers import Bidirectional, LSTM
-from tqdm import tqdm_notebook
+from tqdm import tqdm_notebook, tqdm
 
-import sys
 sys.path.append('../')
 from datasets.reader import GikryaReader
-
+from_notebook = True
 
 class BiLSTMClassifier:
     def __init__(self, config_path='build_config.json', is_training=True, pad_idx=0, chkp_dir='.'):
@@ -134,8 +135,12 @@ class BiLSTMClassifier:
                     self.saver.restore(sess, self.chkp_dir + f'/{from_chkp}')
                 step = 0
                 for epoch in range(epochs):
-                    progress_bar = tqdm_notebook(batch_generator(X_tr, y_tr, batch_size, to_shuffle=True),
-                                                 total=total)
+                    if from_notebook:
+                        progress_bar = tqdm_notebook(batch_generator(X_tr, y_tr, batch_size, to_shuffle=True),
+                                                     total=total)
+                    else:
+                        progress_bar = tqdm(batch_generator(X_tr, y_tr, batch_size, to_shuffle=True),
+                                            total=total)
                     for x, y_ in progress_bar:
 
                         weights = np.zeros_like(x)
@@ -177,9 +182,9 @@ class BiLSTMClassifier:
                             foo_save()
                 self.saver.save(sess, self.chkp_dir + '/my_model',
                                 global_step=step)
-            # except:
-            #     print(f'saving checkpoint to {self.chkp_dir + "/my_model_interrupted"}')
-            #     self.saver.save(sess, self.chkp_dir + '/my_model_interrupted')
+        # except:
+        #     print(f'saving checkpoint to {self.chkp_dir + "/my_model_interrupted"}')
+        #     self.saver.save(sess, self.chkp_dir + '/my_model_interrupted')
 
         return train_inf, validation_inf
 
@@ -250,6 +255,7 @@ def batch_generator(X, y=None, bs=30, to_shuffle=False):
 
 
 if __name__ == '__main__':
+    from_notebook = False
     p = argparse.ArgumentParser()
     p.add_argument('--max_seq_len', type=int, default=60)
     p.add_argument('--bs', type=int, default=50)
@@ -311,5 +317,5 @@ if __name__ == '__main__':
     inf = clf.fit(X_train, y_train, batch_size=batch_size, epochs=max_epochs, dropout=dropout, save_per_step=2000,
                   validation_step=200, validation_data=(X_test, y_test))
 
-    with open(log, 'w') as f:
-        json.dump(inf, f)
+    with open(log, 'wb') as f:
+        pickle.dump(inf, f)

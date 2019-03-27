@@ -275,8 +275,7 @@ def batch_generator(X, y=None, bs=30, to_shuffle=False):
             yield A[i * bs: (i + 1) * bs]
 
 
-if __name__ == '__main__':
-    from_notebook = False
+def main(from_notebook=True):
     p = argparse.ArgumentParser()
     p.add_argument('--max_seq_len', type=int, default=60)
     p.add_argument('--bs', type=int, default=50)
@@ -297,7 +296,7 @@ if __name__ == '__main__':
     batch_size = args.bs
     optimizer = args.optimizer
     hidden_size = args.hidden_size
-    emb_size = args.emb_size
+    # emb_size = args.emb_size
     lr = args.lr
     num_layers = args.num_layers
     dropout = args.dropout
@@ -340,3 +339,9 @@ if __name__ == '__main__':
 
     with open(log, 'wb') as f:
         pickle.dump(inf, f)
+
+
+
+if __name__ == '__main__':
+    from_notebook = False
+    main(from_notebook)

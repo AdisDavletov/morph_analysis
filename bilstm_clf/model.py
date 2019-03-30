@@ -5,7 +5,7 @@ from datetime import datetime
 
 import numpy as np
 import tensorflow as tf
-from reader import GikryaReader
+from tensorflow.python.ops.rnn import dynamic_rnn
 from sklearn.utils import shuffle
 from tensorflow.keras.layers import Bidirectional, LSTM
 from tqdm import tqdm_notebook, tqdm
@@ -14,12 +14,14 @@ from_notebook = True
 
 
 class BiLSTMClassifier:
-    def __init__(self, config_path='build_config.json', is_training=True, pad_idx=0, chkp_dir='.', merge_mode='ave'):
+    def __init__(self, config_path='build_config.json', is_training=True, pad_idx=0, chkp_dir='.', merge_mode='ave',
+                 weight_decay=0.0):
         self.config_path = config_path
         self.is_training = is_training
         self.pad_idx = pad_idx
         self.chkp_dir = chkp_dir
         self.merge_mode = merge_mode
+        self.weight_decay = weight_decay
         tf.reset_default_graph()
         self.global_step = tf.train.get_or_create_global_step()
         self.build_model()
@@ -52,12 +54,12 @@ class BiLSTMClassifier:
 
         self.dropout = tf.placeholder(tf.float32, shape=[], name='dropout')
         self.keep_prob = 1.0 - self.dropout
-        self.inputs = tf.placeholder(tf.int32, shape=[None, max_seq_len], name='inputs')
-        self.targets = tf.placeholder(tf.int32, shape=[None, max_seq_len], name='targets')
-        self.weights = tf.placeholder(tf.float32, shape=[None, max_seq_len], name='weights')
+        self.inputs = tf.placeholder(tf.int32, shape=[None, None], name='inputs')
+        self.targets = tf.placeholder(tf.int32, shape=[None, None], name='targets')
+        self.weights = tf.placeholder(tf.float32, shape=[None, None], name='weights')
 
         self.lr = tf.get_variable(initializer=lr, trainable=False, name='learning_rate')
-        tf.summary.scalar('lr', self.lr)
+        tf.summary.scalar('lr__', self.lr)
         with tf.device("/cpu:0"):
             embeddings = tf.get_variable(
                 "embeddings", [voc_size, hidden_size], dtype=tf.float32)
@@ -66,7 +68,10 @@ class BiLSTMClassifier:
                 inputs = tf.nn.dropout(inputs, keep_prob=self.keep_prob)
 
         intermediate_size = 2 * hidden_size if self.merge_mode == 'concat' else hidden_size
+        model = None
 
+        lstm_input = tf.python.ops.rnn.dynamic_rnn()
+        dynamic_rnn()
         for i in range(num_layers):
             if i == 0:
                 model = Bidirectional(LSTM(hidden_size, return_sequences=True), merge_mode=self.merge_mode,
@@ -74,7 +79,7 @@ class BiLSTMClassifier:
             else:
                 if self.is_training:
                     model = tf.nn.dropout(model, keep_prob=self.keep_prob)
-                model = Bidirectional(LSTM(hidden_size, return_sequences=True),
+                model = Bidirectional(LSTM(hidden_size, return_sequences=True), merge_mode=self.merge_mode,
                                       input_shape=(max_seq_len, intermediate_size))(model)
         self.dense = tf.get_variable('dense', [intermediate_size, num_classes], dtype=tf.float32)
 
@@ -92,11 +97,28 @@ class BiLSTMClassifier:
                                                      average_across_batch=False,
                                                      name='loss')
         self.loss_averaged = tf.reduce_mean(self.loss)
+        tf.summary.scalar('loss__', self.loss_averaged)
 
-        tf.summary.scalar('batch_loss', self.loss_averaged)
+        l2_loss = tf.constant(0.0, dtype=tf.float32)
+        for var in tf.trainable_variables():
+            l2_loss += tf.nn.l2_loss(var)
 
-        self.accuracy = tf.metrics.accuracy(self.targets, self.predictions, weights=self.weights, name='accuracy')
-        tf.summary.scalar('accuracy', self.accuracy)
+        self.l2_loss = self.loss_averaged + l2_loss * self.weight_decay
+        tf.summary.scalar('loss_l2__')
+
+        print('targets shape:', self.targets.get_shape())
+        print('predictions shape:', self.predictions.get_shape())
+        print('weights shape:', self.weights.get_shape())
+        correct = tf.cast(tf.equal(self.targets, tf.cast(self.predictions, tf.int32)), tf.float32)
+        correct = tf.reduce_sum(tf.multiply(correct, self.weights), name='correct_predictions')
+        total = tf.reduce_sum(self.weights, name='total_predictions')
+        tf.summary.scalar('correct_predictions__', correct)
+        tf.summary.scalar('total_predictions__', total)
+
+        self.accuracy = tf.math.divide(correct, total, name='accuracy')
+        tf.summary.scalar('accuracy__', self.accuracy)
+
+        self.summaries = tf.summary.merge_all()
 
         if config['optimizer'].lower() == 'adam':
             self.optimizer = tf.train.AdamOptimizer(self.lr)
@@ -109,15 +131,16 @@ class BiLSTMClassifier:
         else:
             raise ValueError()
 
-        self.train = self.optimizer.minimize(self.loss, global_step=self.global_step, name='train')
-
-        self.summaries = tf.summary.merge_all()
+        trainable_variables = tf.trainable_variables()
+        grads = tf.gradients(self.loss_averaged, trainable_variables)
+        self.train = self.optimizer.apply_gradients(zip(grads, trainable_variables), global_step=self.global_step,
+                                                    name='train')
 
     def fit(self, inputs, targets, batch_size=30, epochs=5, from_chkp=None, dropout=0.2, with_lr=False,
             save_per_step=998, validation_split=0.2, validation_step=100, foo_save=None, validation_data=None):
         validation_accuracy, i = 0., 0
         validation_loss = 0.
-
+        do_validate = True if validation_split > 0. else False
         X = np.copy(inputs)
         y = np.copy(targets)
 
@@ -126,9 +149,12 @@ class BiLSTMClassifier:
         if validation_data is not None:
             X_tr, y_tr = X, y
             X_vl, y_vl = validation_data[0], validation_data[1]
-        else:
+        elif do_validate:
             X_tr, X_vl = X[border:], X[:border]
             y_tr, y_vl = y[border:], y[:border]
+        else:
+            X_tr, y_tr = X, y
+            X_vl, y_vl = None, None
 
         total = (0 if len(X_tr) % batch_size == 0 else 1) + (len(X_tr) // batch_size)
 
@@ -168,7 +194,7 @@ class BiLSTMClassifier:
                     fetched = sess.run(fetches=fetches, feed_dict=feed_dict)
 
                     step = fetched['step']
-                    accuracy = fetched['accuracy'][1] * 100
+                    accuracy = fetched['accuracy'] * 100
                     loss = fetched['loss']
                     summaries = fetched['summaries']
                     swt.add_summary(summaries, step)
@@ -176,29 +202,29 @@ class BiLSTMClassifier:
                     train_inf['loss'][step] = loss
                     train_inf['accuracy'][step] = accuracy
 
-                    if step % validation_step + 1 == validation_step:
+                    if do_validate and (step % validation_step + 1 == validation_step):
                         val_inf = self.validate(X_vl, y_vl, sess)
                         validation_inf['loss'][step] = val_inf['loss']
                         validation_inf['accuracy'][step] = val_inf['accuracy']
                         validation_accuracy = val_inf['accuracy']
                         validation_loss = val_inf['loss']
-                        summary = tf.Summary(value=[
-                            tf.Summary.Value(tag="val_loss", simple_value=validation_loss),
+                        summary_1 = tf.Summary(value=[
+                            tf.Summary.Value(tag="loss__", simple_value=validation_loss),
                         ])
-                        swd.add_summary(summary)
-                        summary = tf.Summary(value=[
-                            tf.Summary.Value(tag="val_accuracy", simple_value=validation_accuracy),
+                        swd.add_summary(summary_1, step)
+                        summary_2 = tf.Summary(value=[
+                            tf.Summary.Value(tag="accuracy__", simple_value=validation_accuracy),
                         ])
-                        swd.add_summary(summary, step)
+                        swd.add_summary(summary_2, step)
 
                     progress_bar.set_postfix_str(
                         f'ep: {epoch + 1}/{epochs},'
                         f'loss: {"%.4f" % loss}, acc: {"%.3f" % accuracy},'
                         f'val_loss: {"%.4f" % validation_loss}, val_acc: {"%.3f" % validation_accuracy}')
 
-                if step % save_per_step + 1 == save_per_step:
-                    self.saver.save(sess, self.chkp_dir + '/my_model',
-                                    global_step=step)
+                    if step % save_per_step + 1 == save_per_step:
+                        self.saver.save(sess, self.chkp_dir + '/my_model',
+                                        global_step=step)
                     if foo_save is not None:
                         foo_save()
             self.saver.save(sess, self.chkp_dir + '/my_model',
@@ -232,7 +258,7 @@ class BiLSTMClassifier:
                          self.weights: weights}
             fetched = sess.run(fetches, feed_dict=feed_dict)
             loss += sum(fetched['loss'])
-            accuracy += fetched['accuracy'][1]
+            accuracy += fetched['accuracy']
         loss /= len(X)
         accuracy /= i
         return {'loss': loss, 'accuracy': accuracy * 100}
@@ -245,12 +271,16 @@ class BiLSTMClassifier:
                 tokens = df.iloc[i].tokens
                 IDs = df.iloc[i].IDs
                 predicts = predictions[i]
-                for token, predict, id in zip(tokens[1:], predicts, IDs):
+                l = len(predicts)
+                predicts = [x for x in predicts] + [305] * (len(tokens) - l)
+                for token, predict, id in zip(tokens, predicts, IDs):
                     if token == '_pad_': break
                     if predict not in voc:
                         cat = '_unk_#_unk_'
                     else:
                         cat = voc[predict]
+                    if cat == '_pad_#_pad_':
+                        cat = 'NOUN#_'
                     pos = cat.split('#')[0]
                     gram_cats = cat.split('#')[1]
                     print(id, token, '_', pos, gram_cats, sep='\t', file=f)
@@ -291,6 +321,8 @@ def main(from_notebook=True):
     p.add_argument('--train_log', type=str, default='.logs')
     p.add_argument('--max_epochs', type=int, default=20)
     args = p.parse_args()
+
+    from reader import GikryaReader
 
     max_seq_len = args.max_seq_len
     batch_size = args.bs
@@ -340,8 +372,7 @@ def main(from_notebook=True):
     with open(log, 'wb') as f:
         pickle.dump(inf, f)
 
-
-
-if __name__ == '__main__':
-    from_notebook = False
-    main(from_notebook)
+#
+# if __name__ == '__main__':
+#     from_notebook = False
+#     main(from_notebook)

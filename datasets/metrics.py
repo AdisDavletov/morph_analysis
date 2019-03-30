@@ -24,7 +24,7 @@ def category_accuracy(gold_df, predicted_df, category='case'):
                 total += 1
             else:
                 if len(cat1) > 0: flag = False
-                total += len(not bool(len(cat1)))
+                total += int(not bool(len(cat1)))
                 continue
         total_sentence += 1
         correct_sentence += int(flag)

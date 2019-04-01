@@ -7,6 +7,7 @@ class BuildConfig(object):
                  endings_inp_drop=0.3,
                  gram_inp_drop=0.3,
                  rnn_state_drop=0.01,
+                 rnn_out_drop=0.2,
                  dense_drop=0.2,
                  use_endings=True,
                  endings_emb_size=50,
@@ -26,6 +27,7 @@ class BuildConfig(object):
         self.endings_inp_drop = endings_inp_drop
         self.gram_inp_drop = gram_inp_drop
         self.rnn_state_drop = rnn_state_drop
+        self.rnn_out_drop = rnn_out_drop
         self.dense_drop = dense_drop
         self.use_endings = use_endings
         self.endings_emb_size = endings_emb_size

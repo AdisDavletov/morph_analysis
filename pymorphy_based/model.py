@@ -411,7 +411,7 @@ class Analyser:
                 f'acc: {"/".join([acc, v_acc])}, pred: {pred}, loss: {"/".join([main_loss, v_loss])}, next: {next}')
 
     @staticmethod
-    def get_split(sample_counter: int, val_part: float) -> Tuple[np.array, np.array]:
+    def get_split(sample_counter: int, val_part: float):
         perm = np.random.permutation(sample_counter)
         border = int(sample_counter * (1 - val_part))
         train_idx = perm[:border]

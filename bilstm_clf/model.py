@@ -132,7 +132,7 @@ class BiLSTMClassifier:
             raise ValueError()
 
         trainable_variables = tf.trainable_variables()
-        grads = tf.gradients(self.loss_averaged, trainable_variables)
+        grads = tf.gradients(self.l2_loss, trainable_variables)
         self.train = self.optimizer.apply_gradients(zip(grads, trainable_variables), global_step=self.global_step,
                                                     name='train')
 

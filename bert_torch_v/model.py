@@ -1,13 +1,53 @@
 import numpy as np
 import torch
 from keras.preprocessing.sequence import pad_sequences
-from pytorch_pretrained_bert import BertTokenizer, BertForTokenClassification
+from pytorch_pretrained_bert import BertTokenizer, BertForTokenClassification, BertModel
 from sklearn.model_selection import train_test_split
+from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
 from torch.utils.data import TensorDataset, RandomSampler, DataLoader, SequentialSampler
-
+from torch import nn
 # from datasets import reader
 from tqdm import tqdm_notebook
+
+
+class BertForTokenClassificationNew(BertForTokenClassification):
+    def __init__(self, config, num_labels, layers='0,6,11'):
+        super().__init__(config, num_labels)
+        # self.bert = BertModel(config)
+        # self.num_labels = num_labels
+        # self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        # self.classifier = nn.Linear(config.hidden_size, num_labels)
+        # self.apply(self.init_bert_weights)
+        self.layers = [int(x) for x in layers.split(',')]
+
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None):
+        sequence_output, _ = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=True)
+        sequence_output = [layer for i, layer in enumerate(sequence_output) if i in self.layers]
+        sequence_output = torch.mean(torch.stack(sequence_output), dim=0)
+        sequence_output = self.dropout(sequence_output)
+        logits = self.classifier(sequence_output)
+
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            # Only keep active parts of the loss
+            if attention_mask is not None:
+                active_loss = attention_mask.view(-1) == 1
+                active_logits = logits.view(-1, self.num_labels)[active_loss]
+                active_labels = labels.view(-1)[active_loss]
+                loss = loss_fct(active_logits, active_labels)
+            else:
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            return loss
+        else:
+            return logits
+
+    def save(self, filename):
+        torch.save(self.state_dict(), filename)
+
+    def load(self, filename, device='cuda'):
+        device = torch.device(device)
+        self.load_state_dict(torch.load(filename, map_location=device))
 
 
 class BertMorphAnalyzer:
@@ -29,6 +69,7 @@ class BertMorphAnalyzer:
         self.full_fine_tune = train_config.full_fine_tune
         self.train_dataloader = None
         self.valid_dataloader = None
+        self.layers = build_config.layers
         pass
 
     def prepare(self, filename):
@@ -49,16 +90,16 @@ class BertMorphAnalyzer:
         self.valid_dataloader = DataLoader(valid_data, sampler=valid_sampler, batch_size=self.train_config.batch_size,
                                            drop_last=False)
 
-        self.model = BertForTokenClassification.from_pretrained(self.bert_model, num_labels=self.num_labels)
+        self.model = BertForTokenClassificationNew.from_pretrained(self.bert_model, num_labels=self.num_labels, layers=self.layers)
         self.model.cuda()
 
-    def train(self, dump_dir='chkps'):
+    def train(self, log_dir=None, chkp_dir=None):
         if self.full_fine_tune:
             param_optimizer = list(self.model.named_parameters())
             no_decay = ['bias', 'gamma', 'beta']
             optimizer_grouped_parameters = [
                 {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)],
-                 'weight_decay_rate': 0.01},
+                 'weight_decay_rate': self.train_config.wd},
                 {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)],
                  'weight_decay_rate': 0.0}
             ]
@@ -81,7 +122,8 @@ class BertMorphAnalyzer:
             self.model.train()
             tr_loss = 0
             nb_tr_examples, nb_tr_steps = 0, 0
-            tr_total = tr_len // self.train_config.batch_size + tr_len % self.train_config.batch_size
+            tr_extra_batch = 1 if tr_len % self.train_config.batch_size > 0 else 0
+            tr_total = tr_len // self.train_config.batch_size + tr_extra_batch
             tr_progress = tqdm_notebook(self.train_dataloader, total=tr_total)
             for step, batch in enumerate(tr_progress):
                 # add batch to gpu
@@ -107,10 +149,12 @@ class BertMorphAnalyzer:
             print("Train loss: {}".format(tr_loss / nb_tr_steps))
             # VALIDATION on validation set
             self.model.eval()
+            val_extra_batch = 1 if val_len % self.train_config.batch_size > 0 else 0
             eval_loss, eval_accuracy = 0, 0
             nb_eval_steps, nb_eval_examples = 0, 0
             predictions, true_labels = [], []
-            val_total = val_len // self.train_config.batch_size + val_len % self.train_config.batch_size
+
+            val_total = val_len // self.train_config.batch_size + val_extra_batch
             val_progress = tqdm_notebook(self.valid_dataloader, total=val_total)
             for batch in val_progress:
                 batch = tuple(t.to(device) for t in batch)
@@ -137,6 +181,7 @@ class BertMorphAnalyzer:
             eval_loss = eval_loss / nb_eval_steps
             print("Validation loss: {}".format(eval_loss))
             print("Validation Accuracy: {}".format(eval_accuracy / nb_eval_steps))
+        return self
 
     def split_data(self, inputs, targets, attention_masks):
         if self.jointly_classification:
@@ -174,6 +219,7 @@ class BertMorphAnalyzer:
 
     def to_features(self, df):
         df, all_pos, all_gram_cats, all_pos_gram_cats = self.prepare_df(df)
+        df.lengths.hist()
         self.pos2idx = all_pos
         self.gram_cats2idx = all_gram_cats
         self.pos_gram_cats2idx = all_pos_gram_cats
@@ -205,7 +251,7 @@ class BertMorphAnalyzer:
             )
             targets = (pos_targets, gram_cats_targets)
         attention_masks = [[float(x) for x in sentence][:self.max_seq_len] + [0.] * (
-                len(input_id) - min(self.max_seq_len, len(sentence))) for sentence, input_id in
+            len(input_id) - min(self.max_seq_len, len(sentence))) for sentence, input_id in
                            zip(df.correspondence, input_ids)]
         return input_ids, targets, attention_masks
 
@@ -258,6 +304,7 @@ class BertMorphAnalyzer:
         df['gram_cats'] = all_new_gram_cats
         df['POSs_and_gram_cats'] = all_new_pos_and_gram_cats
         df['correspondence'] = correspondence
+        df['lengths'] = df.tokens.apply(len)
         all_pos = [fill_sub_word] + sorted(all_pos) if not replicate_to_sub_words else sorted(all_pos)
         all_gram_cats = [fill_sub_word] + sorted(all_gram_cats) if not replicate_to_sub_words else sorted(
             all_gram_cats)

@@ -1,3 +1,4 @@
+import os
 import sys
 
 import numpy as np
@@ -7,7 +8,7 @@ from tensorflow import divide
 from tensorflow.contrib.seq2seq import sequence_loss
 from tensorflow.python.ops.rnn import bidirectional_dynamic_rnn
 from tensorflow.python.ops.rnn_cell_impl import LSTMStateTuple
-from tqdm import tqdm_notebook, tqdm
+from tqdm import tqdm_notebook
 
 sys.path.append('../')
 from vectorizers.endings_vectorizer import EndingsVectorizer
@@ -33,11 +34,23 @@ class Analyser:
         self.is_training = is_training
 
     def prepare(self, filenames):
-        loader = Loader(n_endings=self.build_config.n_endings, lower=self.build_config.lower)
-        loader.parse_corpora(filenames)
-        self.grammeme_vectorizer_input = loader.grammeme_vectorizer_input
-        self.grammeme_vectorizer_output = loader.grammeme_vectorizer_output
-        self.endings_vectorizer = loader.endings_vectorizer
+        gram_inp = self.chkp_dir + '/gram_inp.dmp'
+        gram_out = self.chkp_dir + '/gram_out.dmp'
+        endings = self.chkp_dir + '/endings.dmp'
+        if os.path.exists(gram_inp):
+            self.grammeme_vectorizer_input.load(gram_inp)
+        if os.path.exists(gram_out):
+            self.grammeme_vectorizer_output.load(gram_out)
+        if os.path.exists(endings):
+            self.endings_vectorizer.load(endings)
+        if self.grammeme_vectorizer_input.is_empty() or \
+            self.grammeme_vectorizer_output.is_empty() or \
+            self.endings_vectorizer.is_empty():
+            loader = Loader(n_endings=self.build_config.n_endings, lower=self.build_config.lower)
+            loader.parse_corpora(filenames)
+            self.grammeme_vectorizer_input = loader.grammeme_vectorizer_input
+            self.grammeme_vectorizer_output = loader.grammeme_vectorizer_output
+            self.endings_vectorizer = loader.endings_vectorizer
 
     def build(self):
         config = self.build_config

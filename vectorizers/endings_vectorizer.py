@@ -41,6 +41,9 @@ class EndingsVectorizer(object):
     def get_size(self) -> int:
         return len(self.name_to_index) + 1
 
+    def is_empty(self):
+        return len(self.name_to_index) == 0
+
     def load(self, filename: str) -> None:
         with open(filename, 'r') as f:
             vectorizer = jsonpickle.decode(f.read())

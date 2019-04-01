@@ -4,22 +4,23 @@ import json
 
 class BuildConfig(object):
     def __init__(self,
-                 endings_inp_drop=0.3,
-                 gram_inp_drop=0.3,
-                 rnn_state_drop=0.01,
+                 endings_inp_drop=0.2,
+                 gram_inp_drop=0.2,
+                 rnn_state_drop=0.0,
                  rnn_out_drop=0.2,
                  dense_drop=0.2,
                  use_endings=True,
-                 endings_emb_size=50,
+                 endings_emb_size=25,
                  use_gram=True,
                  rnn_hidden_size=128,
                  seed=2019,
-                 merge_mode='ave',
-                 n_rnn_layers=3,
+                 merge_mode='concat',
+                 n_rnn_layers=2,
                  dense_size=128,
+                 clip_norm=5.0,
                  optimizer='adam',
                  use_pos_lm=True,
-                 use_wd=True,
+                 use_wd=False,
                  wd=0.0002,
                  n_endings=3,
                  lower=True
@@ -43,6 +44,7 @@ class BuildConfig(object):
         self.wd = wd
         self.n_endings = n_endings
         self.lower = lower
+        self.clip_norm = clip_norm
 
     def save(self, filename):
         with open(filename, 'w', encoding='utf-8') as f:

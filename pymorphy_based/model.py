@@ -287,7 +287,7 @@ class Analyser:
                 trainable_variables = tf.trainable_variables()
                 loss = tf.constant(0.0, dtype=tf.float32)
                 if config.use_pos_lm:
-                    loss += pred_pos_loss + next_pos_loss
+                    loss += self.pred_pos_loss_avg + self.next_pos_loss_avg
                 loss += self.main_loss_avg
                 if config.use_wd:
                     self.wd = tf.get_variable(name='weight_decay', initializer=config.wd, trainable=False)
@@ -297,6 +297,10 @@ class Analyser:
                     loss = loss + l2_loss * self.wd
 
                 grads = tf.gradients(loss, trainable_variables)
+                if self.build_config.clip_norm is not None:
+                    self.clip_norm = tf.get_variable(name='clip_norm', initializer=self.build_config.clip_norm,
+                                                     trainable=False)
+                    grads = [tf.clip_by_norm(grad, self.clip_norm) for grad in grads]
                 self.train_op = optimizer.apply_gradients(zip(grads, trainable_variables), global_step=self.global_step,
                                                           name='train_op')
 

@@ -82,7 +82,7 @@ class Analyser:
             lstm_input = tf.get_variable('lstm_input',
                                          shape=[embeddings.get_shape().as_list()[-1], config.rnn_hidden_size])
             lstm_input_bias = tf.get_variable('lstm_input_bias', shape=[config.rnn_hidden_size])
-            lstm_input = tf.matmul(embeddings, lstm_input) + lstm_input_bias
+            lstm_input = tf.tensordot(embeddings, lstm_input, axes=((-1),(0))) + lstm_input_bias
             lstm_input = tf.nn.relu(lstm_input)
 
         with tf.variable_scope('lstm'):
@@ -285,7 +285,7 @@ class Analyser:
     def dense_layer(self, in_size, out_size, name, inputs, activation=None):
         weights = tf.get_variable('w_' + name, shape=[in_size, out_size])
         bias = tf.get_variable('b_' + name, shape=[out_size])
-        result = tf.matmul(inputs, weights) + bias
+        result = tf.tensordot(inputs, weights, axes=((-1),(0))) + bias
         if activation == 'relu':
             result = tf.nn.relu(result)
         elif activation == 'softmax':

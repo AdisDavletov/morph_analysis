@@ -73,7 +73,7 @@ class Analyser:
 
         if config.use_gram:
             with tf.variable_scope('grammems'):
-                gram_vec_size = self.grammeme_vectorizer_input.get_size()
+                gram_vec_size = self.grammeme_vectorizer_input.grammemes_count()
                 self.grammems_input = tf.placeholder(dtype=tf.float32, shape=[None, None, gram_vec_size],
                                                      name='grammems_input')
                 grammems_input = tf.nn.dropout(self.grammems_input, rate=gram_inp_drop)

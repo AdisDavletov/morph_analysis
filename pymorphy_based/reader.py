@@ -153,7 +153,8 @@ class BatchGenerator:
                         gram_vector_index = self.grammeme_vectorizer_output.get_index_by_name(pos + "#" + tags)
                         last_sentence.append(WordForm(text=word, gram_vector_index=gram_vector_index))
         for index, bucket in enumerate(self.buckets):
-            yield self.__to_tensor(bucket)
+            if len(bucket) > 0:
+                yield self.__to_tensor(bucket)
 
 
 

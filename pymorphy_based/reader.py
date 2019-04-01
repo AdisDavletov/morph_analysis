@@ -2,17 +2,18 @@
 # Автор: Гусев Илья
 # Описание: Генератор батчей с определёнными параметрами.
 
+import sys
 from collections import namedtuple
 from typing import List, Tuple
 
-import nltk
 import numpy as np
 from pymorphy2 import MorphAnalyzer
 from russian_tagsets import converters
-import sys
+
 sys.path.append('../')
 from vectorizers.endings_vectorizer import EndingsVectorizer
 from vectorizers.grammems_vectorizer import GrammemsVectorizer
+from vectorizers.process_tag import convert_from_opencorpora_tag, process_gram_tag
 
 WordForm = namedtuple("WordForm", "text gram_vector_index")
 
@@ -29,7 +30,7 @@ class BatchGenerator:
                  grammeme_vectorizer_output: GrammemsVectorizer,
                  endings_vectorizer: EndingsVectorizer,
                  indices: np.array,
-                 build_config: BuildModelConfig):
+                 build_config):
         self.file_names = file_names  # type: List[str]
         # Параметры батчей.
         self.batch_size = train_config.external_batch_size  # type: int
@@ -93,14 +94,13 @@ class BatchGenerator:
     def get_sample(sentence: List[str],
                    converter,
                    morph: MorphAnalyzer,
-                   grammeme_vectorizer: GrammemeVectorizer,
+                   grammeme_vectorizer: GrammemsVectorizer,
                    endings_vectorizer: EndingsVectorizer):
 
         word_gram_vectors = []
         word_indices = []
         for word in sentence:
             gram_value_indices = np.zeros(grammeme_vectorizer.grammemes_count())
-
 
             # Индексы слов.
             word_index = endings_vectorizer.get_index(word)

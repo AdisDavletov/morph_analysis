@@ -61,13 +61,15 @@ class TrainConfig(object):
                  random_seed=2019,
                  val_part=0.1,
                  external_batch_size=5000,
-                 n_epochs=1
+                 n_epochs=1,
+                 lr=0.001
                  ):
         self.sentence_len_groups = sentence_len_groups
         self.random_seed = random_seed
         self.val_part = val_part
         self.external_batch_size = external_batch_size
         self.n_epochs = n_epochs
+        self.lr = lr
 
     def save(self, filename):
         with open(filename, 'w', encoding='utf-8') as f:

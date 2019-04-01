@@ -68,7 +68,7 @@ class Analyser:
                                          initializer=config.rnn_state_drop)
         dense_drop = tf.get_variable(name='dense_drop', trainable=False, initializer=config.dense_drop)
         self.training = tf.get_variable(name='is_training', trainable=False, dtype=tf.bool, initializer=True)
-        self.lr = tf.get_variable(name='lr', shape=[], trainable=False)
+        self.lr = tf.get_variable(name='lr', initializer=self.train_config.lr, trainable=False)
         tf.summary.scalar('lr__', self.lr)
 
         self.weights = tf.placeholder(dtype=tf.float32, shape=[None, None], name='weights')

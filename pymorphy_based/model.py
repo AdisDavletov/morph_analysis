@@ -7,7 +7,7 @@ from tensorflow import divide
 from tensorflow.contrib.seq2seq import sequence_loss
 from tensorflow.python.ops.rnn import bidirectional_dynamic_rnn
 from tensorflow.python.ops.rnn_cell_impl import LSTMStateTuple
-from tqdm import tqdm_notebook
+from tqdm import tqdm_notebook, tqdm
 
 sys.path.append('../')
 from vectorizers.endings_vectorizer import EndingsVectorizer
@@ -311,7 +311,7 @@ class Analyser:
             tr_wr = tf.summary.FileWriter(self.chkp_dir + '/train', sess.graph)
             val_wr = tf.summary.FileWriter(self.chkp_dir + '/dev', sess.graph)
             for epoch in range(self.train_config.n_epochs):
-                batch_generator = tqdm_notebook(BatchGenerator(file_names=filenames,
+                batch_generator = tqdm(BatchGenerator(file_names=filenames,
                                                                train_config=self.train_config,
                                                                build_config=self.build_config,
                                                                grammeme_vectorizer_input=self.grammeme_vectorizer_input,
@@ -331,7 +331,7 @@ class Analyser:
     def fit(self, sess, data, target, val_idx, filenames, bs, summary_step, validation_step, tr_wr, val_wr,
             with_lr=None):
         total = len(target['main']) // bs + min(len(target['main']) % bs, 1)
-        progress = tqdm_notebook(range(total), total=total)
+        progress = tqdm(range(total), total=total)
         fetches = {}
         config = self.build_config
         fetches.update({'main_loss': self.main_loss_avg, 'train_op': self.train_op,
@@ -386,7 +386,7 @@ class Analyser:
                                                        indices=val_idx,
                                                        build_config=self.build_config):
                     for j in range(len(v_target['main']) // bs + min(1, len(v_target['main']) % bs)):
-                        new_feed_dict = {self.train_op: False, self.target: v_target['main'],
+                        new_feed_dict = {self.training: False, self.target: v_target['main'],
                                          self.weights: v_data['weights']}
                         if config.use_endings:
                             new_feed_dict[self.endings_input] = v_data['endings'][j * bs:(j + 1) * bs]

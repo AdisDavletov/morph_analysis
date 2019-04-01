@@ -439,6 +439,7 @@ def main():
     train_config = TrainConfig()
     build_config = BuildConfig()
 
+    print(build_config.__dict__)
     analyser = Analyser(build_config, train_config, is_training=True)
     analyser.build()
     analyser.train(filenames=['../datasets/gikrya_new_train.out'], bs=50, validation_step=250)

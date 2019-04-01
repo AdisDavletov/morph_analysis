@@ -2,13 +2,12 @@ import sys
 
 import numpy as np
 import tensorflow as tf
+from reader import BatchGenerator
 from tensorflow import divide
 from tensorflow.contrib.seq2seq import sequence_loss
 from tensorflow.python.ops.rnn import bidirectional_dynamic_rnn
 from tensorflow.python.ops.rnn_cell_impl import LSTMStateTuple
 from tqdm import tqdm_notebook
-
-from reader import BatchGenerator
 
 sys.path.append('../')
 from vectorizers.endings_vectorizer import EndingsVectorizer
@@ -83,7 +82,7 @@ class Analyser:
             lstm_input = tf.get_variable(name='lstm_input',
                                          shape=[embeddings.get_shape().as_list()[-1], config.rnn_hidden_size])
             lstm_input_bias = tf.get_variable(name='lstm_input_bias', shape=[config.rnn_hidden_size])
-            lstm_input = tf.tensordot(embeddings, lstm_input, axes=((-1),(0))) + lstm_input_bias
+            lstm_input = tf.tensordot(embeddings, lstm_input, axes=((-1), (0))) + lstm_input_bias
             lstm_input = tf.nn.relu(lstm_input)
 
         with tf.variable_scope('lstm'):
@@ -190,6 +189,7 @@ class Analyser:
                                             next_pos, 'softmax')
                 next_pos_loss = sequence_loss(logits=next_pos,
                                               targets=self.next_pos_target,
+                                              weights=self.weights,
                                               average_across_timesteps=False,
                                               average_across_batch=False,
                                               name='next_pos_loss')
@@ -208,6 +208,7 @@ class Analyser:
 
                 pred_pos_loss = sequence_loss(logits=pred_pos,
                                               targets=self.pred_pos_target,
+                                              weights=self.weights,
                                               average_across_timesteps=False,
                                               average_across_batch=False,
                                               name='pred_pos_loss')
@@ -223,6 +224,7 @@ class Analyser:
                                        outputs, 'softmax')
             main_loss = sequence_loss(logits=outputs,
                                       targets=self.target,
+                                      weights=self.weights,
                                       average_across_timesteps=False,
                                       average_across_batch=False,
                                       name='main_loss')
@@ -282,7 +284,7 @@ class Analyser:
     def dense_layer(self, in_size, out_size, name, inputs, activation=None):
         weights = tf.get_variable('w_' + name, shape=[in_size, out_size])
         bias = tf.get_variable('b_' + name, shape=[out_size])
-        result = tf.tensordot(inputs, weights, axes=((-1),(0))) + bias
+        result = tf.tensordot(inputs, weights, axes=((-1), (0))) + bias
         if activation == 'relu':
             result = tf.nn.relu(result)
         elif activation == 'softmax':
@@ -296,7 +298,6 @@ class Analyser:
 
         total = len(train_idx) // self.train_config.external_batch_size + min(
             len(train_idx) % self.train_config.external_batch_size, 1)
-
 
         with tf.Session() as sess:
             tr_wr = tf.summary.FileWriter(self.chkp_dir + '/train', sess.graph)
@@ -431,6 +432,7 @@ class Analyser:
                         flag = True
 
         return sample_counter
+
 
 def main():
     train_config = TrainConfig()

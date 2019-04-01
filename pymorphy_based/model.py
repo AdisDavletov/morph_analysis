@@ -307,6 +307,7 @@ class Analyser:
             len(train_idx) % self.train_config.external_batch_size, 1)
 
         with tf.Session() as sess:
+            sess.run(tf.global_variables_initializer())
             tr_wr = tf.summary.FileWriter(self.chkp_dir + '/train', sess.graph)
             val_wr = tf.summary.FileWriter(self.chkp_dir + '/dev', sess.graph)
             for epoch in range(self.train_config.n_epochs):

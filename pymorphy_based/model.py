@@ -2,7 +2,7 @@ import sys
 
 import numpy as np
 import tensorflow as tf
-from reader import BatchGenerator
+from reader import BatchGenerator, Loader
 from tensorflow import divide
 from tensorflow.contrib.seq2seq import sequence_loss
 from tensorflow.python.ops.rnn import bidirectional_dynamic_rnn
@@ -31,6 +31,13 @@ class Analyser:
         self.first_layer_outputs = None
         self.saver = None
         self.is_training = is_training
+
+    def prepare(self, filenames):
+        loader = Loader(n_endings=self.build_config.n_endings, loader=self.build_config.lower)
+        loader.parse_corpora(filenames)
+        self.grammeme_vectorizer_input = loader.grammeme_vectorizer_input
+        self.grammeme_vectorizer_output = loader.grammeme_vectorizer_output
+        self.endings_vectorizer = loader.endings_vectorizer
 
     def build(self):
         config = self.build_config
@@ -441,6 +448,7 @@ def main():
     print(build_config.__dict__)
     analyser = Analyser(build_config, train_config, is_training=True)
     analyser.build()
+    analyser.prepare()
     analyser.train(filenames=['../datasets/gikrya_new_train.out'], bs=50, validation_step=250)
 
 # def if __name__ == '__main__':

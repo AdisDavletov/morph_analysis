@@ -154,3 +154,50 @@ class BatchGenerator:
                         last_sentence.append(WordForm(text=word, gram_vector_index=gram_vector_index))
         for index, bucket in enumerate(self.buckets):
             yield self.__to_tensor(bucket)
+
+
+
+
+class Loader(object):
+
+    def __init__(self, n_endings=3, lower=True):
+        self.grammeme_vectorizer_input = GrammemsVectorizer()
+        self.grammeme_vectorizer_output = GrammemsVectorizer()
+        self.endings_vectorizer = EndingsVectorizer(n_endings, lower)
+        self.morph = MorphAnalyzer()
+        self.converter = converters.converter('opencorpora-int', 'ud14')
+
+    def parse_corpora(self, file_names: List[str]):
+        """
+        Построить WordVocabulary, GrammemeVectorizer по корпусу
+
+        :param file_names: пути к файлам корпуса.
+        """
+        for file_name in file_names:
+            with open(file_name, encoding="utf-8") as f:
+                for line in f:
+                    if line == "\n":
+                        continue
+                    self.__process_line(line)
+
+        self.grammeme_vectorizer_input.init_possible_vectors()
+        self.grammeme_vectorizer_output.init_possible_vectors()
+
+    def __process_line(self, line: str):
+        """
+        Обработка строчки в корпусе с морфоразметкой.
+        :param line:
+        :return:
+        """
+        text, lemma, pos_tag, grammemes = line.strip().split("\t")[1:5]
+
+        self.endings_vectorizer.add_ending(text)
+
+        # Заполняем набор возможных выходных тегов.
+        self.grammeme_vectorizer_output.add_grammemes(pos_tag, grammemes)
+        # Заполняем набор возможных входных тегов.
+        for parse in self.morph.parse(text):
+            pos, gram = convert_from_opencorpora_tag(self.converter, parse.tag, text)
+            gram = process_gram_tag(gram)
+            self.grammeme_vectorizer_input.add_grammemes(pos, gram)
+

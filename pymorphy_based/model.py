@@ -322,10 +322,11 @@ class Analyser:
                                                 total=total)
 
                 for data, target in batch_generator:
-                    self.fit(sess, data, target, val_idx, filenames, bs, summary_step, validation_step, tr_wr, val_wr,
-                             with_lr)
+                    step = self.fit(sess, data, target, val_idx, filenames, bs, summary_step, validation_step, tr_wr,
+                                    val_wr,
+                                    with_lr)
 
-                self.saver.save(sess, self.chkp_dir + '/my_model', global_step=self.global_step)
+                self.saver.save(sess, self.chkp_dir + '/my_model', global_step=step)
 
     def fit(self, sess, data, target, val_idx, filenames, bs, summary_step, validation_step, tr_wr, val_wr,
             with_lr=None):
@@ -415,6 +416,7 @@ class Analyser:
 
             progress.set_postfix_str(
                 f'acc: {"/".join([acc, v_acc])}, pred: {pred}, loss: {"/".join([main_loss, v_loss])}, next: {next}')
+        return step
 
     @staticmethod
     def get_split(sample_counter: int, val_part: float):

@@ -198,7 +198,7 @@ class Analyser:
         with tf.variable_scope('after_lstm'):
             rnn_output_size = config.rnn_hidden_size if config.merge_mode != 'concat' else (config.rnn_hidden_size * 2)
 
-            outputs = self.dense_layer(config.rnn_hidden_size * 2, config.dense_size, 'dense_post_rnn', outputs)
+            outputs = self.dense_layer(rnn_output_size, config.dense_size, 'dense_post_rnn', outputs)
             outputs = tf.nn.dropout(outputs, rate=dense_drop)
             outputs = tf.contrib.layers.batch_norm(inputs=outputs, updates_collections=None)
             outputs = tf.nn.relu(outputs)
@@ -309,9 +309,10 @@ class Analyser:
         self.saver = tf.train.Saver(self.variables_to_save)
 
     def dense_layer(self, in_size, out_size, name, inputs, activation=None):
-        weights = tf.get_variable('w_' + name, shape=[in_size, out_size])
-        bias = tf.get_variable('b_' + name, shape=[out_size])
-        result = tf.tensordot(inputs, weights, axes=((-1), (0))) + bias
+        _weights = tf.get_variable('w_' + name, shape=[in_size, out_size])
+        _bias = tf.get_variable('b_' + name, shape=[out_size])
+        result = tf.tensordot(inputs, _weights, axes=((-1), (0))) + _bias
+        print(name, ':', inputs.get_shape().as_list()[-1])
         if activation == 'relu':
             result = tf.nn.relu(result)
         elif activation == 'softmax':

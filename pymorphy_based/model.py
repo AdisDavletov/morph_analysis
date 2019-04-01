@@ -33,7 +33,7 @@ class Analyser:
         self.is_training = is_training
 
     def prepare(self, filenames):
-        loader = Loader(n_endings=self.build_config.n_endings, loader=self.build_config.lower)
+        loader = Loader(n_endings=self.build_config.n_endings, lower=self.build_config.lower)
         loader.parse_corpora(filenames)
         self.grammeme_vectorizer_input = loader.grammeme_vectorizer_input
         self.grammeme_vectorizer_output = loader.grammeme_vectorizer_output

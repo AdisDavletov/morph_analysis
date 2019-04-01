@@ -314,7 +314,7 @@ class Analyser:
             result = tf.nn.softmax(result)
         return result
 
-    def train(self, filenames, with_lr=None, bs=30, summary_step=10, validation_step=200):
+    def train(self, filenames, with_lr=None, bs=30, summary_step=10, validation_step=200, from_chkp=None):
         np.random.seed(self.train_config.random_seed)
         sample_counter = self.count_samples(filenames)
         train_idx, val_idx = self.get_split(sample_counter, self.train_config.val_part)
@@ -324,6 +324,8 @@ class Analyser:
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
+            if from_chkp is not None:
+                self.saver.restore(sess, self.chkp_dir + f'/{from_chkp}')
             tr_wr = tf.summary.FileWriter(self.chkp_dir + '/train', sess.graph)
             val_wr = tf.summary.FileWriter(self.chkp_dir + '/dev', sess.graph)
             for epoch in range(self.train_config.n_epochs):
@@ -460,11 +462,12 @@ class Analyser:
         return sample_counter
 
 
-def main(filenames=['../datasets/gikrya_new_train.out']):
+def main(filenames=['../datasets/gikrya_new_train.out'], epochs=1):
     train_config = TrainConfig()
     build_config = BuildConfig()
     build_config.use_wd = False
     build_config.rnn_state_drop = 0.0
+    train_config.n_epochs = epochs
 
     print(build_config.__dict__)
     analyser = Analyser(build_config, train_config, is_training=True)

@@ -196,7 +196,7 @@ class Analyser:
                 outputs = merge_mode(f_rnn_outputs, b_rnn_outputs)  # [bs, seq_len, rnn_size (2 * rnn_size)]
 
         with tf.variable_scope('after_lstm'):
-            rnn_output_size = config.rnn_hidden_size if config.merge_mode != 'concat' else config.rnn_hidden_size
+            rnn_output_size = config.rnn_hidden_size if config.merge_mode != 'concat' else config.rnn_hidden_size * 2
 
             outputs = self.dense_layer(rnn_output_size, config.dense_size, 'dense_post_rnn', outputs)
             outputs = tf.nn.dropout(outputs, rate=dense_drop)

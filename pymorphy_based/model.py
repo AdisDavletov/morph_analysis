@@ -340,8 +340,8 @@ class Analyser:
             fetches['next'] = self.next_pos_loss_avg
         fetches['step'] = self.global_step
 
-        v_loss = 0.0
-        v_acc = 0.
+        v_loss = '0.'
+        v_acc = '0.'
 
         for i, _ in enumerate(progress):
             feed_dict = {}

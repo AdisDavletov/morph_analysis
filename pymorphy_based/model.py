@@ -49,8 +49,11 @@ class Analyser:
             loader = Loader(n_endings=self.build_config.n_endings, lower=self.build_config.lower)
             loader.parse_corpora(filenames)
             self.grammeme_vectorizer_input = loader.grammeme_vectorizer_input
+            self.grammeme_vectorizer_input.save(gram_inp)
             self.grammeme_vectorizer_output = loader.grammeme_vectorizer_output
+            self.grammeme_vectorizer_output.save(gram_out)
             self.endings_vectorizer = loader.endings_vectorizer
+            self.endings_vectorizer.save(endings)
 
     def build(self):
         config = self.build_config

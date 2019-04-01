@@ -448,7 +448,7 @@ def main():
     print(build_config.__dict__)
     analyser = Analyser(build_config, train_config, is_training=True)
     analyser.build()
-    analyser.prepare()
+    analyser.prepare(filenames=['../datasets/gikrya_new_train.out'])
     analyser.train(filenames=['../datasets/gikrya_new_train.out'], bs=50, validation_step=250)
 
 # def if __name__ == '__main__':

@@ -463,6 +463,8 @@ class Analyser:
 def main(filenames=['../datasets/gikrya_new_train.out']):
     train_config = TrainConfig()
     build_config = BuildConfig()
+    build_config.use_wd = False
+    build_config.rnn_state_drop = 0.0
 
     print(build_config.__dict__)
     analyser = Analyser(build_config, train_config, is_training=True)

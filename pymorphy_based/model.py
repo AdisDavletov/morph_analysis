@@ -7,7 +7,7 @@ from tensorflow.contrib.seq2seq import sequence_loss
 from tensorflow.python.ops.rnn import bidirectional_dynamic_rnn
 from tqdm import tqdm_notebook
 
-from pymorphy_based.reader import BatchGenerator
+from .reader import BatchGenerator
 
 sys.path.append('../')
 from vectorizers.endings_vectorizer import EndingsVectorizer

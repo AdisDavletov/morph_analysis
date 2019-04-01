@@ -86,9 +86,9 @@ class Analyser:
             lstm_input = tf.nn.relu(lstm_input)
 
         with tf.variable_scope('lstm'):
-            initial_state_forward = tf.get_variable('f_initial_state', shape=[config.rnn_hidden_state * 2],
+            initial_state_forward = tf.get_variable('f_initial_state', shape=[config.rnn_hidden_size * 2],
                                                     name='f_rnn_init_state_1')
-            initial_state_backward = tf.get_variable('b_initial_state', shape=[config.rnn_hidden_state * 2],
+            initial_state_backward = tf.get_variable('b_initial_state', shape=[config.rnn_hidden_size * 2],
                                                      name='b_rnn_init_state_1')
 
             f_init_state_c = tf.expand_dims(initial_state_forward[:config.rnn_hidden_size], axis=0)

@@ -19,7 +19,8 @@ class BuildConfig(object):
                  optimizer='adam',
                  use_pos_lm=True,
                  use_wd=True,
-                 wd=0.0002
+                 wd=0.0002,
+                 n_endings=3
                  ):
         self.endings_inp_drop = endings_inp_drop
         self.gram_inp_drop = gram_inp_drop
@@ -39,6 +40,7 @@ class BuildConfig(object):
 
         self.use_wd = use_wd
         self.wd = wd
+        self.n_endings = n_endings
 
     def save(self, filename):
         with open(filename, 'w', encoding='utf-8') as f:

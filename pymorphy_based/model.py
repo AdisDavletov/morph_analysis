@@ -79,17 +79,15 @@ class Analyser:
         batch_size = tf.shape(embeddings, name='batch_size')[0]
 
         with tf.variable_scope('lstm_input'):
-            lstm_input = tf.get_variable('lstm_input',
+            lstm_input = tf.get_variable(name='lstm_input',
                                          shape=[embeddings.get_shape().as_list()[-1], config.rnn_hidden_size])
-            lstm_input_bias = tf.get_variable('lstm_input_bias', shape=[config.rnn_hidden_size])
+            lstm_input_bias = tf.get_variable(name='lstm_input_bias', shape=[config.rnn_hidden_size])
             lstm_input = tf.tensordot(embeddings, lstm_input, axes=((-1),(0))) + lstm_input_bias
             lstm_input = tf.nn.relu(lstm_input)
 
         with tf.variable_scope('lstm'):
-            initial_state_forward = tf.get_variable('f_initial_state', shape=[config.rnn_hidden_size * 2],
-                                                    name='f_rnn_init_state_1')
-            initial_state_backward = tf.get_variable('b_initial_state', shape=[config.rnn_hidden_size * 2],
-                                                     name='b_rnn_init_state_1')
+            initial_state_forward = tf.get_variable(name='f_initial_state_1', shape=[config.rnn_hidden_size * 2])
+            initial_state_backward = tf.get_variable('b_initial_state_1', shape=[config.rnn_hidden_size * 2])
 
             f_init_state_c = tf.expand_dims(initial_state_forward[:config.rnn_hidden_size], axis=0)
             f_init_state_m = tf.expand_dims(initial_state_forward[config.rnn_hidden_size:], axis=0)
@@ -143,10 +141,8 @@ class Analyser:
 
             extra_rnn_layers = config.n_rnn_layers - 1
             if extra_rnn_layers > 0:
-                initial_state_forward = tf.get_variable('f_initial_state', shape=[config.rnn_hidden_size * 2],
-                                                        name='f_rnn_init_state_2_n')
-                initial_state_backward = tf.get_variable('b_initial_state', shape=[config.rnn_hidden_size * 2],
-                                                         name='b_rnn_init_state_2_n')
+                initial_state_forward = tf.get_variable('f_initial_state_2', shape=[config.rnn_hidden_size * 2])
+                initial_state_backward = tf.get_variable('b_initial_state_2', shape=[config.rnn_hidden_size * 2])
 
                 f_init_state_c = tf.expand_dims(initial_state_forward[:config.rnn_hidden_size], axis=0)
                 f_init_state_m = tf.expand_dims(initial_state_forward[config.rnn_hidden_size:], axis=0)

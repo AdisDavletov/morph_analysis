@@ -20,7 +20,8 @@ class BuildConfig(object):
                  use_pos_lm=True,
                  use_wd=True,
                  wd=0.0002,
-                 n_endings=3
+                 n_endings=3,
+                 lower=True
                  ):
         self.endings_inp_drop = endings_inp_drop
         self.gram_inp_drop = gram_inp_drop
@@ -29,7 +30,6 @@ class BuildConfig(object):
         self.use_endings = use_endings
         self.endings_emb_size = endings_emb_size
         self.use_gram = use_gram
-
         self.rnn_hidden_size = rnn_hidden_size
         self.seed = seed
         self.merge_mode = merge_mode
@@ -37,10 +37,10 @@ class BuildConfig(object):
         self.dense_size = dense_size
         self.optimizer = optimizer
         self.use_pos_lm = use_pos_lm
-
         self.use_wd = use_wd
         self.wd = wd
         self.n_endings = n_endings
+        self.lower = lower
 
     def save(self, filename):
         with open(filename, 'w', encoding='utf-8') as f:
@@ -55,7 +55,7 @@ class BuildConfig(object):
 
 class TrainConfig(object):
     def __init__(self,
-                 sentence_len_groups=[[26, 40],[40,50],[15,25],[1,6],[7,14]],
+                 sentence_len_groups=[[26, 40], [40, 50], [15, 25], [1, 6], [7, 14]],
                  random_seed=2019,
                  val_part=0.1,
                  external_batch_size=5000,

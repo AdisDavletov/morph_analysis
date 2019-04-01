@@ -251,8 +251,8 @@ class Analyser:
 
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
-        with tf.control_dependencies(update_ops):
-            if self.is_training:
+        if self.is_training:
+            with tf.control_dependencies(update_ops):
                 def get_optimizer(build_config, lr):
                     if build_config.optimizer.lower() == 'adam':
                         optimizer = tf.train.AdamOptimizer(lr)
@@ -284,9 +284,9 @@ class Analyser:
                 self.train_op = optimizer.apply_gradients(zip(grads, trainable_variables), global_step=self.global_step,
                                                           name='train_op')
 
-            self.variables_to_save = {'lr': self.lr, 'global_step': self.global_step}
-            self.variables_to_save.update(dict([(x.op.name, x) for x in tf.trainable_variables()]))
-            self.saver = tf.train.Saver(self.variables_to_save)
+        self.variables_to_save = {'lr': self.lr, 'global_step': self.global_step}
+        self.variables_to_save.update(dict([(x.op.name, x) for x in tf.trainable_variables()]))
+        self.saver = tf.train.Saver(self.variables_to_save)
 
     def dense_layer(self, in_size, out_size, name, inputs, activation=None):
         weights = tf.get_variable('w_' + name, shape=[in_size, out_size])

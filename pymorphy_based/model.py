@@ -140,7 +140,7 @@ class Analyser:
                 return (f_cell, b_cell)
 
             extra_rnn_layers = config.n_rnn_layers - 1
-            if extra_rnn_layers > 0:
+            if False and extra_rnn_layers > 0:
                 initial_state_forward = tf.get_variable('f_initial_state_2', shape=[config.rnn_hidden_size * 2])
                 initial_state_backward = tf.get_variable('b_initial_state_2', shape=[config.rnn_hidden_size * 2])
 

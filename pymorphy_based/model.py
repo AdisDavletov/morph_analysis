@@ -142,7 +142,7 @@ class Analyser:
                 if config.merge_mode == 'ave':
                     outputs = tf.reduce_mean(tf.stack([forward, backward], axis=0), axis=0)
                 elif config.merge_mode == 'concat':
-                    outputs = tf.concat([forward, backward], axis=-1, name='1st_birnn_layer_outputs')
+                    outputs = tf.concat([forward, backward], axis=-1, name='rnn_layer_outputs')
                 elif config.merge_mode == 'sum':
                     outputs = tf.reduce_sum(tf.stack([forward, backward], axis=0), axis=0)
                 else:
@@ -196,7 +196,7 @@ class Analyser:
                 outputs = merge_mode(f_rnn_outputs, b_rnn_outputs)  # [bs, seq_len, rnn_size (2 * rnn_size)]
 
         with tf.variable_scope('after_lstm'):
-            rnn_output_size = config.rnn_hidden_size if config.merge_mode != 'concat' else config.rnn_hidden_size * 2
+            rnn_output_size = config.rnn_hidden_size if config.merge_mode != 'concat' else (config.rnn_hidden_size * 2)
 
             outputs = self.dense_layer(rnn_output_size, config.dense_size, 'dense_post_rnn', outputs)
             outputs = tf.nn.dropout(outputs, rate=dense_drop)
@@ -206,7 +206,7 @@ class Analyser:
         if config.use_pos_lm:
             with tf.variable_scope('next_pos'):
                 self.next_pos_target = tf.placeholder(dtype=tf.int32, shape=[None, None])
-                next_pos = self.dense_layer(rnn_output_size, config.dense_size, 'dense_next_pos', f_outputs, 'relu')
+                next_pos = self.dense_layer(config.rnn_hidden_size, config.dense_size, 'dense_next_pos', f_outputs, 'relu')
                 next_pos = self.dense_layer(config.dense_size, self.grammeme_vectorizer_output.pos_count() + 1,
                                             'next_pos',
                                             next_pos, 'softmax')
@@ -224,7 +224,7 @@ class Analyser:
 
             with tf.variable_scope('pred_pos'):
                 self.pred_pos_target = tf.placeholder(dtype=tf.int32, shape=[None, None])
-                pred_pos = self.dense_layer(rnn_output_size, config.dense_size, 'dense_pred_pos', f_outputs, 'relu')
+                pred_pos = self.dense_layer(config.rnn_hidden_size, config.dense_size, 'dense_pred_pos', b_outputs, 'relu')
                 pred_pos = self.dense_layer(config.dense_size, self.grammeme_vectorizer_output.pos_count() + 1,
                                             'pred_pos',
                                             pred_pos, 'softmax')

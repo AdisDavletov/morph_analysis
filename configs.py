@@ -60,10 +60,10 @@ class BuildConfig(object):
 class TrainConfig(object):
     def __init__(self,
                  sentence_len_groups=[[26, 40], [40, 50], [15, 25], [1, 6], [7, 14]],
-                 random_seed=2019,
+                 random_seed=42,
                  val_part=0.1,
                  external_batch_size=5000,
-                 n_epochs=1,
+                 n_epochs=10,
                  lr=0.001
                  ):
         self.sentence_len_groups = sentence_len_groups

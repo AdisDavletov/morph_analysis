@@ -36,15 +36,15 @@ class Analyser:
         config = self.build_config
         embeddings = []
 
-        rnn_out_drop = tf.get_variable(name='rnn_out_drop', shape=[], trainable=False, initializer=config.rnn_out_drop)
-        endings_inp_drop = tf.get_variable(name='endings_inp_drop', shape=[], trainable=False,
+        rnn_out_drop = tf.get_variable(name='rnn_out_drop', trainable=False, initializer=config.rnn_out_drop)
+        endings_inp_drop = tf.get_variable(name='endings_inp_drop', trainable=False,
                                            initializer=config.endings_inp_drop)
-        gram_inp_drop = tf.get_variable(name='gram_inp_drop', shape=[], trainable=False,
+        gram_inp_drop = tf.get_variable(name='gram_inp_drop', trainable=False,
                                         initializer=config.gram_inp_drop)
-        rnn_state_drop = tf.get_variable(name='rnn_state_drop', shape=[], trainable=False,
+        rnn_state_drop = tf.get_variable(name='rnn_state_drop', trainable=False,
                                          initializer=config.rnn_state_drop)
-        dense_drop = tf.get_variable(name='dense_drop', shape=[], trainable=False, initializer=config.dense_drop)
-        self.training = tf.get_variable(name='is_training', shape=[], trainable=False, dtype=tf.bool, initializer=True)
+        dense_drop = tf.get_variable(name='dense_drop', trainable=False, initializer=config.dense_drop)
+        self.training = tf.get_variable(name='is_training', trainable=False, dtype=tf.bool, initializer=True)
         self.lr = tf.get_variable(name='lr', shape=[], trainable=False)
         tf.summary.scalar('lr__', self.lr)
 
@@ -268,7 +268,7 @@ class Analyser:
                     loss += pred_pos_loss + next_pos_loss
                 loss += self.main_loss_avg
                 if config.use_wd:
-                    self.wd = tf.get_variable('weight_decay', shape=[], initializer=config.wd)
+                    self.wd = tf.get_variable(name='weight_decay', initializer=config.wd, trainable=False)
                     l2_loss = tf.constant(0.0, dtype=tf.float32)
                     for var in tf.trainable_variables():
                         l2_loss += tf.nn.l2_loss(var)

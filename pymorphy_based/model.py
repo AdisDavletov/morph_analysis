@@ -56,6 +56,7 @@ class Analyser:
             self.endings_vectorizer.save(endings)
 
     def build(self):
+        tf.reset_default_graph()
         config = self.build_config
         embeddings = []
 
@@ -138,7 +139,7 @@ class Analyser:
                                                         output_keep_prob=1. - rnn_out_drop,
                                                         seed=config.seed)
 
-            (f_outputs, b_outputs), _ = bidirectional_dynamic_rnn(f_lstm_cell, b_lstm_cell, lstm_input,
+            (f_outputs, b_outputs), _ = bidirectional_dynamic_rnn(f_lstm_cell, b_lstm_cell, lstm_input, dtype=tf.float32,
                                                                   initial_state_fw=f_init_state,
                                                                   initial_state_bw=b_init_state)
 
@@ -198,7 +199,7 @@ class Analyser:
                 f_cell = tf.nn.rnn_cell.MultiRNNCell(f_cells, state_is_tuple=True)
                 b_cell = tf.nn.rnn_cell.MultiRNNCell(b_cells, state_is_tuple=True)
 
-                (f_rnn_outputs, b_rnn_outputs), _ = bidirectional_dynamic_rnn(f_cell, b_cell, outputs,
+                (f_rnn_outputs, b_rnn_outputs), _ = bidirectional_dynamic_rnn(f_cell, b_cell, outputs, dtype=tf.float32,
                                                                               initial_state_fw=f_init_state,
                                                                               initial_state_bw=b_init_state)
                 outputs = merge_mode(f_rnn_outputs, b_rnn_outputs)  # [bs, seq_len, rnn_size (2 * rnn_size)]

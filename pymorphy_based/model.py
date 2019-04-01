@@ -220,7 +220,7 @@ class Analyser:
 
         with tf.variable_scope('main_pred'):
             self.target = tf.placeholder(dtype=tf.int32, shape=[None, None])
-            outputs = self.dense_layer(config.dense_size, self.grammeme_vectorizer_output.size() + 1, 'main_pred',
+            outputs = self.dense_layer(config.dense_size, self.grammeme_vectorizer_output.get_size() + 1, 'main_pred',
                                        outputs, 'softmax')
             main_loss = sequence_loss(logits=outputs,
                                       targets=self.target,

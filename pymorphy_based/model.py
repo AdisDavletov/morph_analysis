@@ -320,7 +320,7 @@ class Analyser:
                                                                ),
                                                 total=total)
 
-                for i, (data, target) in batch_generator:
+                for data, target in batch_generator:
                     self.fit(sess, data, target, val_idx, filenames, bs, summary_step, validation_step, tr_wr, val_wr,
                              with_lr)
 

@@ -109,21 +109,25 @@ class Analyser:
             lstm_input = tf.nn.relu(lstm_input)
 
         with tf.variable_scope('lstm'):
-            initial_state_forward = tf.get_variable(name='f_initial_state_1', shape=[config.rnn_hidden_size * 2])
-            initial_state_backward = tf.get_variable('b_initial_state_1', shape=[config.rnn_hidden_size * 2])
+            if config.learn_init_state:
+                initial_state_forward = tf.get_variable(name='f_initial_state_1', shape=[config.rnn_hidden_size * 2])
+                initial_state_backward = tf.get_variable('b_initial_state_1', shape=[config.rnn_hidden_size * 2])
 
-            f_init_state_c = tf.expand_dims(initial_state_forward[:config.rnn_hidden_size], axis=0)
-            f_init_state_m = tf.expand_dims(initial_state_forward[config.rnn_hidden_size:], axis=0)
-            b_init_state_c = tf.expand_dims(initial_state_backward[:config.rnn_hidden_size], axis=0)
-            b_init_state_m = tf.expand_dims(initial_state_backward[config.rnn_hidden_size:], axis=0)
+                f_init_state_c = tf.expand_dims(initial_state_forward[:config.rnn_hidden_size], axis=0)
+                f_init_state_m = tf.expand_dims(initial_state_forward[config.rnn_hidden_size:], axis=0)
+                b_init_state_c = tf.expand_dims(initial_state_backward[:config.rnn_hidden_size], axis=0)
+                b_init_state_m = tf.expand_dims(initial_state_backward[config.rnn_hidden_size:], axis=0)
 
-            f_init_state_c = tf.tile(f_init_state_c, multiples=[batch_size, 1])
-            f_init_state_m = tf.tile(f_init_state_m, multiples=[batch_size, 1])
-            b_init_state_c = tf.tile(b_init_state_c, multiples=[batch_size, 1])
-            b_init_state_m = tf.tile(b_init_state_m, multiples=[batch_size, 1])
+                f_init_state_c = tf.tile(f_init_state_c, multiples=[batch_size, 1])
+                f_init_state_m = tf.tile(f_init_state_m, multiples=[batch_size, 1])
+                b_init_state_c = tf.tile(b_init_state_c, multiples=[batch_size, 1])
+                b_init_state_m = tf.tile(b_init_state_m, multiples=[batch_size, 1])
 
-            f_init_state = LSTMStateTuple(f_init_state_c, f_init_state_m)
-            b_init_state = LSTMStateTuple(b_init_state_c, b_init_state_m)
+                f_init_state = LSTMStateTuple(f_init_state_c, f_init_state_m)
+                b_init_state = LSTMStateTuple(b_init_state_c, b_init_state_m)
+            else:
+                f_init_state = None
+                b_init_state = None
 
             f_lstm_cell = tf.nn.rnn_cell.LSTMCell(config.rnn_hidden_size, name='f_lstm_cell_1')
             b_lstm_cell = tf.nn.rnn_cell.LSTMCell(config.rnn_hidden_size, name='b_lstm_cell_1')
@@ -164,24 +168,28 @@ class Analyser:
 
             extra_rnn_layers = config.n_rnn_layers - 1
             if extra_rnn_layers > 0:
-                initial_state_forward = tf.get_variable('f_initial_state_2', shape=[config.rnn_hidden_size * 2])
-                initial_state_backward = tf.get_variable('b_initial_state_2', shape=[config.rnn_hidden_size * 2])
+                if config.learn_init_state:
+                    initial_state_forward = tf.get_variable('f_initial_state_2', shape=[config.rnn_hidden_size * 2])
+                    initial_state_backward = tf.get_variable('b_initial_state_2', shape=[config.rnn_hidden_size * 2])
 
-                f_init_state_c = tf.expand_dims(initial_state_forward[:config.rnn_hidden_size], axis=0)
-                f_init_state_m = tf.expand_dims(initial_state_forward[config.rnn_hidden_size:], axis=0)
-                b_init_state_c = tf.expand_dims(initial_state_backward[:config.rnn_hidden_size], axis=0)
-                b_init_state_m = tf.expand_dims(initial_state_backward[config.rnn_hidden_size:], axis=0)
+                    f_init_state_c = tf.expand_dims(initial_state_forward[:config.rnn_hidden_size], axis=0)
+                    f_init_state_m = tf.expand_dims(initial_state_forward[config.rnn_hidden_size:], axis=0)
+                    b_init_state_c = tf.expand_dims(initial_state_backward[:config.rnn_hidden_size], axis=0)
+                    b_init_state_m = tf.expand_dims(initial_state_backward[config.rnn_hidden_size:], axis=0)
 
-                f_init_state_c = tf.tile(f_init_state_c, multiples=[batch_size, 1])
-                f_init_state_m = tf.tile(f_init_state_m, multiples=[batch_size, 1])
-                b_init_state_c = tf.tile(b_init_state_c, multiples=[batch_size, 1])
-                b_init_state_m = tf.tile(b_init_state_m, multiples=[batch_size, 1])
+                    f_init_state_c = tf.tile(f_init_state_c, multiples=[batch_size, 1])
+                    f_init_state_m = tf.tile(f_init_state_m, multiples=[batch_size, 1])
+                    b_init_state_c = tf.tile(b_init_state_c, multiples=[batch_size, 1])
+                    b_init_state_m = tf.tile(b_init_state_m, multiples=[batch_size, 1])
 
-                f_init_state = LSTMStateTuple(f_init_state_c, f_init_state_m)
-                b_init_state = LSTMStateTuple(b_init_state_c, b_init_state_m)
+                    f_init_state = LSTMStateTuple(f_init_state_c, f_init_state_m)
+                    b_init_state = LSTMStateTuple(b_init_state_c, b_init_state_m)
 
-                f_init_state = tuple([f_init_state] * extra_rnn_layers)
-                b_init_state = tuple([b_init_state] * extra_rnn_layers)
+                    f_init_state = tuple([f_init_state] * extra_rnn_layers)
+                    b_init_state = tuple([b_init_state] * extra_rnn_layers)
+                else:
+                    f_init_state = None
+                    b_init_state = None
 
                 cells = [make_cell(config.rnn_hidden_size, name=f'lstm_cell_{i + 2}') for i in
                          range(extra_rnn_layers)]

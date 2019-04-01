@@ -23,7 +23,8 @@ class BuildConfig(object):
                  use_wd=False,
                  wd=0.0002,
                  n_endings=3,
-                 lower=True
+                 lower=True,
+                 learn_init_state=False,
                  ):
         self.endings_inp_drop = endings_inp_drop
         self.gram_inp_drop = gram_inp_drop
@@ -45,6 +46,7 @@ class BuildConfig(object):
         self.n_endings = n_endings
         self.lower = lower
         self.clip_norm = clip_norm
+        self.learn_init_state = learn_init_state
 
     def save(self, filename):
         with open(filename, 'w', encoding='utf-8') as f:

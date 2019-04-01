@@ -82,7 +82,7 @@ class Analyser:
             lstm_input = tf.get_variable('lstm_input',
                                          shape=[embeddings.get_shape().as_list()[-1], config.rnn_hidden_size])
             lstm_input_bias = tf.get_variable('lstm_input_bias', shape=[config.rnn_hidden_size])
-            lstm_input = embeddings * lstm_input + lstm_input_bias
+            lstm_input = tf.matmul(embeddings, lstm_input) + lstm_input_bias
             lstm_input = tf.nn.relu(lstm_input)
 
         with tf.variable_scope('lstm'):

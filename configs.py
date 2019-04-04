@@ -25,6 +25,7 @@ class BuildConfig(object):
                  n_endings=3,
                  lower=True,
                  learn_init_state=False,
+                 gram_hidden_size=30
                  ):
         self.endings_inp_drop = endings_inp_drop
         self.gram_inp_drop = gram_inp_drop
@@ -47,6 +48,7 @@ class BuildConfig(object):
         self.lower = lower
         self.clip_norm = clip_norm
         self.learn_init_state = learn_init_state
+        self.gram_hidden_size = gram_hidden_size
 
     def save(self, filename):
         with open(filename, 'w', encoding='utf-8') as f:

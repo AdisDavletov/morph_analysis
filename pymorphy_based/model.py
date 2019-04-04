@@ -94,6 +94,8 @@ class Analyser:
                 self.grammems_input = tf.placeholder(dtype=tf.float32, shape=[None, None, gram_vec_size],
                                                      name='grammems_input')
                 grammems_input = tf.nn.dropout(self.grammems_input, rate=gram_inp_drop)
+                grammems_input = self.dense_layer(in_size=gram_vec_size, out_size=config.gram_hidden_size,
+                                                  name='gram_embs', inputs=grammems_input, activation='relu')
                 embeddings.append(grammems_input)
 
         if len(embeddings) > 1:

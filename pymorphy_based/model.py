@@ -377,6 +377,7 @@ class Analyser:
 
             if logs_dir is not None:
                 time = datetime.now().isoformat(timespec='minutes').replace('-', '.')
+                os.makedirs(logs_dir + f'/{time}/', exist_ok=True)
                 with open(logs_dir + f'/{time}/train_loss.json') as f:
                     json.dump(tr_inf, f, indent=4)
                 with open(logs_dir + f'/{time}/validation_loss.json') as f:

@@ -104,7 +104,7 @@ class BiLSTMClassifier:
             l2_loss += tf.nn.l2_loss(var)
 
         self.l2_loss = self.loss_averaged + l2_loss * self.weight_decay
-        tf.summary.scalar('loss_l2__')
+        tf.summary.scalar('loss_l2__', self.l2_loss)
 
         print('targets shape:', self.targets.get_shape())
         print('predictions shape:', self.predictions.get_shape())

@@ -382,9 +382,9 @@ class Analyser:
             if logs_dir is not None:
                 time = datetime.now().isoformat(timespec='minutes').replace('-', '.')
                 os.makedirs(logs_dir + f'/{time}/', exist_ok=True)
-                with open(logs_dir + f'/{time}/train_loss.json') as f:
+                with open(logs_dir + f'/{time}/train_loss.json', 'w') as f:
                     json.dump(tr_inf, f, indent=4)
-                with open(logs_dir + f'/{time}/validation_loss.json') as f:
+                with open(logs_dir + f'/{time}/validation_loss.json', 'w') as f:
                     json.dump(v_inf, f, indent=4)
 
     def fit(self, sess, data, target, val_idx, filenames, bs, summary_step, validation_step, tr_wr, val_wr,

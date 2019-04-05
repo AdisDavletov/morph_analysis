@@ -334,7 +334,7 @@ def main(from_notebook=True):
     dropout = args.dropout
     config_path = args.config_path
     max_epochs = args.max_epochs
-    log = args.train_log + f"-{str(datetime.now()).replace(':', '-').replace(' ', '-')}.txt"
+    log = f"-{datetime.now().isoformat(sep='+', timespec='minutes').replace('-', '.')}"
     print(f'logging loss and accuracy to {log}')
 
     reader = GikryaReader(args.train_file, pad_to=max_seq_len, min_tf=2)
@@ -369,8 +369,10 @@ def main(from_notebook=True):
     inf = clf.fit(X_train, y_train, batch_size=batch_size, epochs=max_epochs, dropout=dropout, save_per_step=2000,
                   validation_step=200, validation_data=(X_test, y_test))
 
-    with open(log, 'wb') as f:
-        pickle.dump(inf, f)
+    with open(log + '_train.json', 'w') as f:
+        json.dump(inf[0], f, indent=4)
+    with open(log + '_validation.json', 'w') as f:
+        json.dump(inf[1], f, indent=4)
 
 
 if __name__ == '__main__':

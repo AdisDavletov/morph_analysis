@@ -70,8 +70,8 @@ class BiLSTMClassifier:
         intermediate_size = 2 * hidden_size if self.merge_mode == 'concat' else hidden_size
         model = None
 
-        lstm_input = tf.python.ops.rnn.dynamic_rnn()
-        dynamic_rnn()
+        # lstm_input = tf.python.ops.rnn.dynamic_rnn()
+        # dynamic_rnn()
         for i in range(num_layers):
             if i == 0:
                 model = Bidirectional(LSTM(hidden_size, return_sequences=True), merge_mode=self.merge_mode,
@@ -334,7 +334,7 @@ def main(from_notebook=True):
     dropout = args.dropout
     config_path = args.config_path
     max_epochs = args.max_epochs
-    log = f"-{datetime.now().isoformat(sep='+', timespec='minutes').replace('-', '.')}"
+    log = f"{datetime.now().isoformat(sep='+', timespec='minutes').replace('-', '.')}"
     print(f'logging loss and accuracy to {log}')
 
     reader = GikryaReader(args.train_file, pad_to=max_seq_len, min_tf=2)

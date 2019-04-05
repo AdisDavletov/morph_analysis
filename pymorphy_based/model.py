@@ -89,7 +89,7 @@ class Analyser:
                 self.endings_embedding = tf.get_variable('endings_embs', shape=[voc_size, config.endings_emb_size],
                                                          initializer=tf.initializers.random_normal)
                 endings_input = tf.nn.embedding_lookup(self.endings_embedding, self.endings_input)
-                endings_input = tf.nn.dropout(endings_input, rate=endings_inp_drop)
+                endings_input = tf.nn.dropout(endings_input, keep_prob=1.- endings_inp_drop)
                 embeddings.append(endings_input)
 
         if config.use_gram:
@@ -97,7 +97,7 @@ class Analyser:
                 gram_vec_size = self.grammeme_vectorizer_input.grammemes_count()
                 self.grammems_input = tf.placeholder(dtype=tf.float32, shape=[None, None, gram_vec_size],
                                                      name='grammems_input')
-                grammems_input = tf.nn.dropout(self.grammems_input, rate=gram_inp_drop)
+                grammems_input = tf.nn.dropout(self.grammems_input, keep_prob=1. - gram_inp_drop)
                 grammems_input = self.dense_layer(in_size=gram_vec_size, out_size=config.gram_hidden_size,
                                                   name='gram_embs', inputs=grammems_input, activation='relu')
                 embeddings.append(grammems_input)
@@ -215,7 +215,7 @@ class Analyser:
             rnn_output_size = config.rnn_hidden_size if config.merge_mode != 'concat' else (config.rnn_hidden_size * 2)
 
             outputs = self.dense_layer(rnn_output_size, config.dense_size, 'dense_post_rnn', outputs)
-            outputs = tf.nn.dropout(outputs, rate=dense_drop)
+            outputs = tf.nn.dropout(outputs, keep_prob=1. - dense_drop)
             outputs = tf.contrib.layers.batch_norm(inputs=outputs, updates_collections=None)
             outputs = tf.nn.relu(outputs)
 

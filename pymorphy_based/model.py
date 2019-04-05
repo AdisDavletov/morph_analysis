@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import sys
@@ -522,4 +523,7 @@ def main(filenames=['../datasets/gikrya_new_train.out'], epochs=10):
 
 
 if __name__ == '__main__':
-    main()
+    p = argparse.ArgumentParser()
+    p.add_argument('--n_epochs', type=int, default=10)
+    args = p.parse_args()
+    main(epochs=args.n_epochs)

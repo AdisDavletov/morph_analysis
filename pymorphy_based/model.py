@@ -1,5 +1,8 @@
+import json
 import os
 import sys
+from collections import defaultdict
+from datetime import datetime
 
 import numpy as np
 import tensorflow as tf
@@ -141,7 +144,8 @@ class Analyser:
                                                         output_keep_prob=1. - rnn_out_drop,
                                                         seed=config.seed)
 
-            (f_outputs, b_outputs), _ = bidirectional_dynamic_rnn(f_lstm_cell, b_lstm_cell, lstm_input, dtype=tf.float32,
+            (f_outputs, b_outputs), _ = bidirectional_dynamic_rnn(f_lstm_cell, b_lstm_cell, lstm_input,
+                                                                  dtype=tf.float32,
                                                                   initial_state_fw=f_init_state,
                                                                   initial_state_bw=b_init_state)
 
@@ -217,7 +221,8 @@ class Analyser:
         if config.use_pos_lm:
             with tf.variable_scope('next_pos'):
                 self.next_pos_target = tf.placeholder(dtype=tf.int32, shape=[None, None])
-                next_pos = self.dense_layer(config.rnn_hidden_size, config.dense_size, 'dense_next_pos', f_outputs, 'relu')
+                next_pos = self.dense_layer(config.rnn_hidden_size, config.dense_size, 'dense_next_pos', f_outputs,
+                                            'relu')
                 next_pos = self.dense_layer(config.dense_size, self.grammeme_vectorizer_output.pos_count() + 1,
                                             'next_pos',
                                             next_pos, 'softmax')
@@ -235,7 +240,8 @@ class Analyser:
 
             with tf.variable_scope('pred_pos'):
                 self.pred_pos_target = tf.placeholder(dtype=tf.int32, shape=[None, None])
-                pred_pos = self.dense_layer(config.rnn_hidden_size, config.dense_size, 'dense_pred_pos', b_outputs, 'relu')
+                pred_pos = self.dense_layer(config.rnn_hidden_size, config.dense_size, 'dense_pred_pos', b_outputs,
+                                            'relu')
                 pred_pos = self.dense_layer(config.dense_size, self.grammeme_vectorizer_output.pos_count() + 1,
                                             'pred_pos',
                                             pred_pos, 'softmax')
@@ -330,10 +336,13 @@ class Analyser:
             result = tf.nn.softmax(result)
         return result
 
-    def train(self, filenames, with_lr=None, bs=30, summary_step=10, validation_step=200, from_chkp=None):
+    def train(self, filenames, with_lr=None, bs=30, summary_step=10, validation_step=200, from_chkp=None,
+              logs_dir=None):
         np.random.seed(self.train_config.random_seed)
         sample_counter = self.count_samples(filenames)
         train_idx, val_idx = self.get_split(sample_counter, self.train_config.val_part)
+        tr_inf = defaultdict(list)
+        v_inf = defaultdict(list)
 
         total = len(train_idx) // self.train_config.external_batch_size + min(
             len(train_idx) % self.train_config.external_batch_size, 1)
@@ -344,6 +353,7 @@ class Analyser:
                 self.saver.restore(sess, self.chkp_dir + f'/{from_chkp}')
             tr_wr = tf.summary.FileWriter(self.chkp_dir + '/train', sess.graph)
             val_wr = tf.summary.FileWriter(self.chkp_dir + '/dev', sess.graph)
+            step = -1
             for epoch in range(self.train_config.n_epochs):
                 batch_generator = tqdm_notebook(BatchGenerator(file_names=filenames,
                                                                train_config=self.train_config,
@@ -356,17 +366,29 @@ class Analyser:
                                                 total=total)
 
                 for data, target in batch_generator:
-                    step = self.fit(sess, data, target, val_idx, filenames, bs, summary_step, validation_step, tr_wr,
-                                    val_wr,
-                                    with_lr)
+                    step, inf = self.fit(sess, data, target, val_idx, filenames, bs, summary_step, validation_step,
+                                         tr_wr,
+                                         val_wr,
+                                         with_lr)
+                    tr_inf[epoch].append(inf['train_loss'])
+                    v_inf[epoch].append(inf['valid_loss'])
 
                 self.saver.save(sess, self.chkp_dir + '/my_model', global_step=step)
+
+            if logs_dir is not None:
+                time = datetime.now().isoformat(timespec='minutes').replace('-', '.')
+                with open(logs_dir + f'/{time}/train_loss.json') as f:
+                    json.dump(tr_inf, f, indent=4)
+                with open(logs_dir + f'/{time}/validation_loss.json') as f:
+                    json.dump(v_inf, f, indent=4)
 
     def fit(self, sess, data, target, val_idx, filenames, bs, summary_step, validation_step, tr_wr, val_wr,
             with_lr=None):
         total = len(target['main']) // bs + min(len(target['main']) % bs, 1)
         progress = tqdm_notebook(range(total), total=total)
         fetches = {}
+        step = -1
+        inf = dict({'train_loss': {}, 'valid_loss': {}})
         config = self.build_config
         fetches.update({'main_loss': self.main_loss_avg, 'train_op': self.train_op,
                         'accuracy': self.accuracy})
@@ -399,6 +421,8 @@ class Analyser:
             next = "%.3f" % fetched['next']
             pred = "%.3f" % fetched['pred']
             step = fetched['step']
+
+            inf['train_loss'][step] = fetched['main_loss']
 
             if 'summaries' in fetches:
                 tr_wr.add_summary(fetched['summaries'], global_step=step)
@@ -437,6 +461,8 @@ class Analyser:
                         v_acc += results['correct']
                 v_loss = v_loss / v_total
                 v_acc = v_acc / v_total
+
+                inf['valid_loss'][step] = v_loss
                 summary_1 = tf.Summary(value=[
                     tf.Summary.Value(tag="main_loss__", simple_value=v_loss),
                 ])
@@ -450,7 +476,7 @@ class Analyser:
 
             progress.set_postfix_str(
                 f'acc: {"/".join([acc, v_acc])}, pred: {pred}, loss: {"/".join([main_loss, v_loss])}, next: {next}')
-        return step
+        return step, inf
 
     @staticmethod
     def get_split(sample_counter: int, val_part: float):
@@ -478,18 +504,18 @@ class Analyser:
         return sample_counter
 
 
-def main(filenames=['../datasets/gikrya_new_train.out'], epochs=1):
+def main(filenames=['../datasets/gikrya_new_train.out'], epochs=10):
     train_config = TrainConfig()
     build_config = BuildConfig()
     build_config.use_wd = False
     build_config.rnn_state_drop = 0.0
     train_config.n_epochs = epochs
 
-    print(build_config.__dict__)
     analyser = Analyser(build_config, train_config, is_training=True)
     analyser.prepare(filenames)
     analyser.build()
-    analyser.train(filenames, bs=50, validation_step=250)
+    analyser.train(filenames, bs=250, validation_step=100, logs_dir=analyser.chkp_dir)
 
-# def if __name__ == '__main__':
-#     main()
+
+if __name__ == '__main__':
+    main()

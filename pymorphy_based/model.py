@@ -40,6 +40,7 @@ class Analyser:
         gram_inp = self.chkp_dir + '/gram_inp.dmp'
         gram_out = self.chkp_dir + '/gram_out.dmp'
         endings = self.chkp_dir + '/endings.dmp'
+        os.makedirs(self.chkp_dir, exist_ok=True)
         if os.path.exists(gram_inp):
             self.grammeme_vectorizer_input.load(gram_inp)
         if os.path.exists(gram_out):

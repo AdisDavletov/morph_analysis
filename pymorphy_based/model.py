@@ -11,7 +11,7 @@ from tensorflow import divide
 from tensorflow.contrib.seq2seq import sequence_loss
 from tensorflow.python.ops.rnn import bidirectional_dynamic_rnn
 from tensorflow.python.ops.rnn_cell_impl import LSTMStateTuple
-from tqdm import tqdm_notebook
+from tqdm import tqdm_notebook, tqdm
 
 sys.path.append('../')
 from vectorizers.endings_vectorizer import EndingsVectorizer
@@ -21,7 +21,7 @@ from configs import BuildConfig, TrainConfig
 
 
 class Analyser:
-    def __init__(self, build_config, train_config, is_training, chkp_dir='chkps'):
+    def __init__(self, build_config, train_config, is_training, chkp_dir='chkps', from_notebook=True):
         self.chkp_dir = chkp_dir
         self.endings_vectorizer = EndingsVectorizer(n_endings=build_config.n_endings,
                                                     lower=build_config.lower)
@@ -35,6 +35,7 @@ class Analyser:
         self.first_layer_outputs = None
         self.saver = None
         self.is_training = is_training
+        self.from_notebook = from_notebook
 
     def prepare(self, filenames):
         gram_inp = self.chkp_dir + '/gram_inp.dmp'
@@ -89,7 +90,7 @@ class Analyser:
                 self.endings_embedding = tf.get_variable('endings_embs', shape=[voc_size, config.endings_emb_size],
                                                          initializer=tf.initializers.random_normal)
                 endings_input = tf.nn.embedding_lookup(self.endings_embedding, self.endings_input)
-                endings_input = tf.nn.dropout(endings_input, keep_prob=1.- endings_inp_drop)
+                endings_input = tf.nn.dropout(endings_input, keep_prob=1. - endings_inp_drop)
                 embeddings.append(endings_input)
 
         if config.use_gram:
@@ -356,15 +357,16 @@ class Analyser:
             val_wr = tf.summary.FileWriter(self.chkp_dir + '/dev', sess.graph)
             step = -1
             for epoch in range(self.train_config.n_epochs):
-                batch_generator = tqdm_notebook(BatchGenerator(file_names=filenames,
-                                                               train_config=self.train_config,
-                                                               build_config=self.build_config,
-                                                               grammeme_vectorizer_input=self.grammeme_vectorizer_input,
-                                                               grammeme_vectorizer_output=self.grammeme_vectorizer_output,
-                                                               endings_vectorizer=self.endings_vectorizer,
-                                                               indices=train_idx
-                                                               ),
-                                                total=total)
+                batch_generator = BatchGenerator(file_names=filenames,
+                                                 train_config=self.train_config,
+                                                 build_config=self.build_config,
+                                                 grammeme_vectorizer_input=self.grammeme_vectorizer_input,
+                                                 grammeme_vectorizer_output=self.grammeme_vectorizer_output,
+                                                 endings_vectorizer=self.endings_vectorizer,
+                                                 indices=train_idx
+                                                 )
+                batch_generator = tqdm_notebook(batch_generator, total=total) if self.from_notebook else tqdm(
+                    batch_generator, total=total)
 
                 for data, target in batch_generator:
                     step, inf = self.fit(sess, data, target, val_idx, filenames, bs, summary_step, validation_step,
@@ -387,7 +389,7 @@ class Analyser:
     def fit(self, sess, data, target, val_idx, filenames, bs, summary_step, validation_step, tr_wr, val_wr,
             with_lr=None):
         total = len(target['main']) // bs + min(len(target['main']) % bs, 1)
-        progress = tqdm_notebook(range(total), total=total)
+        progress = tqdm_notebook(range(total), total=total) if self.from_notebook else tqdm(range(total), total=total)
         fetches = {}
         step = -1
         inf = dict({'train_loss': {}, 'valid_loss': {}})
@@ -513,7 +515,7 @@ def main(filenames=['../datasets/gikrya_new_train.out'], epochs=10):
     build_config.rnn_state_drop = 0.0
     train_config.n_epochs = epochs
 
-    analyser = Analyser(build_config, train_config, is_training=True)
+    analyser = Analyser(build_config, train_config, is_training=True, from_notebook=False)
     analyser.prepare(filenames)
     analyser.build()
     analyser.train(filenames, bs=250, validation_step=100, logs_dir=analyser.chkp_dir)

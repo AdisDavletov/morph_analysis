@@ -372,7 +372,7 @@ def main(from_notebook=True):
     with open(log, 'wb') as f:
         pickle.dump(inf, f)
 
-#
-# if __name__ == '__main__':
-#     from_notebook = False
-#     main(from_notebook)
+
+if __name__ == '__main__':
+    from_notebook = False
+    main(from_notebook)

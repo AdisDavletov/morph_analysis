@@ -509,7 +509,7 @@ class Analyser:
         return sample_counter
 
 
-def main(filenames=['../datasets/gikrya_new_train.out'], epochs=10):
+def main(filenames=['../datasets/gikrya_new_train.out'], epochs=10, from_chkp=None):
     train_config = TrainConfig()
     build_config = BuildConfig()
     build_config.use_wd = False
@@ -519,11 +519,13 @@ def main(filenames=['../datasets/gikrya_new_train.out'], epochs=10):
     analyser = Analyser(build_config, train_config, is_training=True, from_notebook=False)
     analyser.prepare(filenames)
     analyser.build()
-    analyser.train(filenames, bs=250, validation_step=100, logs_dir=analyser.chkp_dir)
+    analyser.train(filenames, bs=250, validation_step=100, logs_dir=analyser.chkp_dir, from_chkp=from_chkp)
 
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('--n_epochs', type=int, default=10)
+    p.add_argument('--from_chkp', type=str, default='')
     args = p.parse_args()
-    main(epochs=args.n_epochs)
+    from_chkp = None if args.from_chkp == '' else args.from_chkp
+    main(epochs=args.n_epochs, from_chkp=from_chkp)
